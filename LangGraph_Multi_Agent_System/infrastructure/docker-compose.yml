@@ -1,0 +1,85 @@
+# =============================================================================
+# Docker Compose — MongoDB Infrastructure for Medical Knowledge Base
+# =============================================================================
+# This file defines the database infrastructure required by the data ingestion
+# ETL pipelines. It provisions:
+#
+#   1. MongoDB 7.0  — Primary document store for medical guidelines and drugs
+#   2. Mongo Express — Web-based admin UI for debugging and visual inspection
+#
+# Usage:
+#   docker compose -f data_ingestion/infrastructure/docker-compose.yml up -d
+#
+# Or via the Python setup script:
+#   python -m data_ingestion.infrastructure.infrastructure_setup
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # MongoDB 7.0 — Document Store
+  # ---------------------------------------------------------------------------
+  # MongoDB is chosen for the medical knowledge base because:
+  #   - Medical guidelines are semi-structured (sections, headings, metadata)
+  #     and map naturally to JSON/BSON documents
+  #   - Drug records vary in schema (some have sub-classes, some don't) —
+  #     MongoDB's flexible schema handles this without null-heavy relational rows
+  #   - Text indexes support full-text search across guideline content
+  #   - The aggregation pipeline supports complex queries the agents will need
+  # ---------------------------------------------------------------------------
+  mongodb:
+    image: mongo:7.0
+    container_name: medical_knowledge_mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: adminpassword
+      MONGO_INITDB_DATABASE: medical_knowledge_base
+    volumes:
+      - medical_knowledge_mongodb_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')", "--quiet"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - medical_knowledge_network
+
+  # ---------------------------------------------------------------------------
+  # Mongo Express — Admin UI (Development Only)
+  # ---------------------------------------------------------------------------
+  # Provides a web interface at http://localhost:8081 for:
+  #   - Browsing the medical_knowledge_base database and its collections
+  #   - Inspecting individual guideline chunks and drug records
+  #   - Running ad-hoc queries during development and debugging
+  #
+  # In production, this service should be removed or access-restricted.
+  # ---------------------------------------------------------------------------
+  mongo_express:
+    image: mongo-express:1.0
+    container_name: medical_knowledge_mongo_express
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: admin
+      ME_CONFIG_MONGODB_ADMINPASSWORD: adminpassword
+      ME_CONFIG_MONGODB_URL: mongodb://admin:adminpassword@mongodb:27017/
+      ME_CONFIG_BASICAUTH: "false"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - medical_knowledge_network
+
+volumes:
+  medical_knowledge_mongodb_data:
+    name: medical_knowledge_mongodb_data
+    driver: local
+
+networks:
+  medical_knowledge_network:
+    name: medical_knowledge_network
+    driver: bridge
