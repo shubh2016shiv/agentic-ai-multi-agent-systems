@@ -1,0 +1,64 @@
+[project]
+name = "langgraph-multi-agent-system"
+version = "0.1.0"
+description = "LangGraph Multi-Agent System for Medical Domain — educational scripts covering MAS principles, orchestration patterns, memory, observability, and resilience."
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Shubham Singh" }]
+
+dependencies = [
+  # LangGraph & LangChain Core
+  "langgraph>=0.3.0",
+  "langchain-core>=0.3.0",
+  "langchain-openai>=0.3.0",
+  "langchain-google-genai>=2.1.0",
+  "langchain-community>=0.3.0",
+  # Document Processing
+  "docling>=2.16.0",
+  "openpyxl>=3.1.0",
+  # MongoDB (Data Ingestion)
+  "pymongo>=4.6.0",
+  # Chunking Strategies
+  "langchain-text-splitters>=0.3.0",
+  "langchain-experimental>=0.3.0",
+  # Vector Store (Long-Term Memory / RAG)
+  "chromadb>=0.6.3",
+  "langchain-chroma>=0.2.2",
+  # Observability (Langfuse) — v3 dropped the [langchain] extra; langchain must be listed separately
+  "langfuse>=3.0.0",
+  "langchain>=0.3.0",
+  # Resilience & Enterprise Patterns
+  "pybreaker>=1.0.0",
+  "ratelimit>=2.2.1",
+  "tenacity>=8.0.0",
+  "tiktoken>=0.5.0",
+  # Data Validation
+  "pydantic>=2.0.0",
+  "pydantic-settings>=2.0.0",
+  # Environment Management
+  "python-dotenv>=1.0.0",
+  "langchain>=1.2.10",
+]
+
+[project.optional-dependencies]
+dev = [
+  "ipykernel>=6.0.0",
+  "jupyter>=1.0.0",
+  "pre-commit>=3.0.0",
+  "ruff>=0.4.0",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = []
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+ignore = ["E501"]
