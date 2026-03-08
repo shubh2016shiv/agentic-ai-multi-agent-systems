@@ -3,6 +3,10 @@ Triage Agent Module
 ===================
 Provides the TriageAgent class which specializes in assessing
 patient symptoms, determining case urgency, and calculating health risks.
+
+Used by:
+    - Handoff and HITL scripts (via process())
+    - MAS architecture scripts (via process_with_context())
 """
 
 from typing import Any
@@ -21,6 +25,10 @@ class TriageAgent(BaseAgent):
     classifying the severity/urgency of symptoms, and determining
     the overall risk level. Follows the Single Responsibility Principle
     by focusing purely on triage assessment before routing to specialists.
+
+    Execution interfaces:
+        - process(input_data)  → AgentResponse  (structured output)
+        - process_with_context(patient_data, context) → str  (MAS architecture scripts)
     """
 
     def __init__(self, **kwargs):
@@ -53,12 +61,36 @@ class TriageAgent(BaseAgent):
         if not user_query:
             raise ValueError("TriageAgent requires a 'query' or 'symptoms' in input_data.")
 
-        # Note: In a fully-fledged LangGraph system, this invocation might
-        # be handled by the graph itself, binding tools dynamically. Here we
-        # provide the direct invoke method for simpler architectures or tests.
         response_text = self.invoke(user_query)
-        
+
         return AgentResponse(
             name=self.name,
-            output=response_text
+            output=response_text,
         )
+
+    def process_with_context(
+        self,
+        patient_data: dict,
+        context: str = "",
+    ) -> str:
+        """
+        Execute triage assessment with optional upstream context.
+
+        Overrides the base implementation to add a domain-specific
+        prompt prefix ("Triage Assessment") for traceability.
+
+        Args:
+            patient_data: Full patient case dict.
+            context: Optional upstream context (usually empty for triage).
+
+        Returns:
+            Triage summary with urgency classification.
+        """
+        patient_summary = self._format_patient_summary(patient_data)
+
+        prompt = f"Triage Assessment:\n\n{patient_summary}"
+        if context:
+            prompt += f"\n\nAdditional Context:\n{context}"
+
+        return self._invoke_llm_with_context(prompt, trace_suffix="triage_assessment")
+
