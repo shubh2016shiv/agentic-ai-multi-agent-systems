@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 ============================================================
 Session-Based Tracing
@@ -107,7 +107,14 @@ from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 
 # -- Project imports ----------------------------------------------------------
+# CONNECTION: core/ root module — get_llm() centralises LLM config.
 from core.config import get_llm
+# CONNECTION: observability/ root module — build_callback_config() accepts
+# session_id and user_id parameters that Langfuse uses to group related
+# traces into a single session. MetricsCollector aggregates usage across
+# all turns within the session.
+# This script demonstrates HOW to correlate multi-turn traces in Langfuse
+# via session_id — the pattern, not the callback implementation.
 from observability.callbacks import build_callback_config
 from observability.metrics import MetricsCollector
 

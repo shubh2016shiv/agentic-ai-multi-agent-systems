@@ -66,6 +66,19 @@ WHAT YOU LEARN
     4. Stream output comparison
 
 ------------------------------------------------------------
+WHEN TO USE
+------------------------------------------------------------
+    Pattern 1 (ToolNode as graph node):
+        Use when tool execution should be visible in the graph
+        topology — useful for tracing, debugging, and HITL
+        confirmation of tool calls.
+
+    Pattern 2 (ToolNode.invoke() inside node):
+        Use when you want the tool execution loop encapsulated
+        within the agent node — simpler graph topology, but tool
+        calls are not separately addressable in the graph.
+
+------------------------------------------------------------
 HOW TO RUN
 ------------------------------------------------------------
     cd D:/Agentic AI/LangGraph_Multi_Agent_System
@@ -93,9 +106,16 @@ from langgraph.prebuilt import ToolNode
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 
 # ── Project imports ─────────────────────────────────────────────────────────
+# CONNECTION: core/ root module — get_llm() centralises LLM config.
+# PatientCase is the canonical domain model used in test scenarios.
 from core.config import get_llm
 from core.models import PatientCase
+# CONNECTION: tools/ root module — analyze_symptoms and assess_patient_risk are
+# component-layer tools. This script demos two patterns for INVOKING them
+# (ToolNode as node vs ToolNode.invoke()). See tools/ for implementations.
 from tools import analyze_symptoms, assess_patient_risk
+# CONNECTION: observability/ root module — build_callback_config() attaches
+# Langfuse trace_name and tags to every LLM call automatically.
 from observability.callbacks import build_callback_config
 
 

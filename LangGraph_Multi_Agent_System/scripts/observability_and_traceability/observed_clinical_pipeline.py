@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 ============================================================
 Observed Clinical Pipeline
@@ -115,11 +115,20 @@ from langgraph.prebuilt import ToolNode
 from langchain_core.messages import HumanMessage, SystemMessage
 
 # -- Project imports ----------------------------------------------------------
+# CONNECTION: core/ root module — get_llm() centralises LLM config.
 from core.config import get_llm
+# CONNECTION: observability/ root module — all four observability components used:
+#   build_callback_config()  — Langfuse trace/span/generation hierarchy (STAGE 1)
+#   get_langfuse_client()    — programmatic trace URL and score attachment (STAGE 3)
+#   observe_agent()          — decorator that wraps nodes in a named Langfuse span (STAGE 5)
+#   MetricsCollector         — per-agent token/cost/latency tracking (STAGE 2)
+# This script is the CAPSTONE that combines all four into one production pipeline.
 from observability.callbacks import build_callback_config
 from observability.tracer import get_langfuse_client
 from observability.decorators import observe_agent
 from observability.metrics import MetricsCollector
+# CONNECTION: tools/ root module — clinical tool functions used by triage and
+# pharmacist agents. Tool call metrics are recorded by MetricsCollector here.
 from tools import analyze_symptoms, assess_patient_risk, check_drug_interactions
 
 

@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 ============================================================
 Parallel Fan-Out Handoff
@@ -53,6 +53,17 @@ WHAT YOU LEARN
     5. When to use parallel vs sequential handoffs
 
 ------------------------------------------------------------
+WHEN TO USE
+------------------------------------------------------------
+    Use parallel_fanout when multiple agents can run independently
+    and concurrently to reduce total workflow latency.
+    All parallel branches are merged before the next sequential step.
+
+    When NOT to use:
+    - If agents need each other's output as input (use supervisor.py)
+    - If execution order matters (use linear_pipeline or supervisor)
+
+------------------------------------------------------------
 HOW TO RUN
 ------------------------------------------------------------
     cd D:/Agentic AI/LangGraph_Multi_Agent_System
@@ -79,8 +90,12 @@ from langgraph.prebuilt import ToolNode
 from langchain_core.messages import HumanMessage, SystemMessage
 
 # ── Project imports ─────────────────────────────────────────────────────────
+# CONNECTION: core/ root module — get_llm() centralises LLM config.
+# PatientCase is the canonical domain model fanned out to each specialist.
 from core.config import get_llm
 from core.models import PatientCase
+# CONNECTION: tools/ root module — domain tool functions (component layer).
+# Each parallel specialist binds its own scoped tool subset.
 from tools import (
     analyze_symptoms,
     assess_patient_risk,
@@ -88,6 +103,8 @@ from tools import (
     lookup_drug_info,
     calculate_dosage_adjustment,
 )
+# CONNECTION: observability/ root module — build_callback_config() attaches
+# Langfuse trace_name and tags to every LLM call automatically.
 from observability.callbacks import build_callback_config
 
 
@@ -151,7 +168,7 @@ def build_fanout_pipeline():
         """
         Coordinator node simply prints and prepares for fan-out.
         """
-        print("\n    [STAGE 5.2] COORDINATOR — fanning out to specialists")
+        print("\n    [Step 5.2] COORDINATOR — fanning out to specialists")
         print("    " + "-" * 50)
         return {}
 
@@ -266,7 +283,7 @@ Use your tools, then provide your assessment.""")
         By the time this node runs, specialist_results contains
         outputs from ALL parallel instances (merged by operator.add).
         """
-        print("\n    [STAGE 5.3] MERGE — collecting parallel results")
+        print("\n    [Step 5.3] MERGE — collecting parallel results")
         print("    " + "-" * 50)
 
         results = state.get("specialist_results", [])
@@ -279,7 +296,7 @@ Use your tools, then provide your assessment.""")
     # ── Node: report ────────────────────────────────────────────────────
     def report_node(state: FanoutState) -> dict:
         """Synthesise all specialist assessments into a final report."""
-        print("\n    [STAGE 5.4] REPORT GENERATOR")
+        print("\n    [Step 5.4] REPORT GENERATOR")
         print("    " + "-" * 50)
 
         results = state.get("specialist_results", [])

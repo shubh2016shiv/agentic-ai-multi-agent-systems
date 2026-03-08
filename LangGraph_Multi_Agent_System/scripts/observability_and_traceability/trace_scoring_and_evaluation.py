@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 ============================================================
 Trace Scoring and Evaluation
@@ -107,7 +107,14 @@ from langgraph.graph.message import add_messages
 from langchain_core.messages import HumanMessage, SystemMessage
 
 # -- Project imports ----------------------------------------------------------
+# CONNECTION: core/ root module — get_llm() centralises LLM config.
+# The LLM is used both for the clinical agent and for the LLM-as-judge scorer.
 from core.config import get_llm
+# CONNECTION: observability/ root module — build_callback_config() attaches
+# Langfuse tracing to every LLM call. get_langfuse_client() provides the
+# programmatic API to attach scores to traces after evaluation.
+# This script demonstrates HOW to attach quality scores to Langfuse traces
+# using both rule-based checks and LLM-as-judge evaluation.
 from observability.callbacks import build_callback_config
 from observability.tracer import get_langfuse_client
 

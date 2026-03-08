@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 ============================================================
 Command-Based Handoff
@@ -53,6 +53,18 @@ WHAT YOU LEARN
     5. Depth guard with Command-based routing
 
 ------------------------------------------------------------
+WHEN TO USE
+------------------------------------------------------------
+    Use command_handoff when the LLM should decide which agent
+    runs next by selecting a "transfer tool". Maximum flexibility;
+    routing logic lives in the LLM's reasoning, not your code.
+
+    When NOT to use:
+    - If routing is deterministic (use conditional_routing.py — zero LLM cost)
+    - If you need a persistent coordinator (use supervisor.py)
+    - Without a depth guard — chains can loop (see multihop_depth_guard.py)
+
+------------------------------------------------------------
 HOW TO RUN
 ------------------------------------------------------------
     cd D:/Agentic AI/LangGraph_Multi_Agent_System
@@ -80,8 +92,13 @@ from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from langchain_core.tools import tool
 
 # ── Project imports ─────────────────────────────────────────────────────────
+# CONNECTION: core/ root module — get_llm() centralises LLM config.
+# PatientCase is the canonical domain model carried through state.
 from core.config import get_llm
 from core.models import PatientCase
+# CONNECTION: tools/ root module — domain tool functions (component layer).
+# This script demos HOW to mix domain tools with handoff Command tools
+# in a single bind_tools() call. See tools/ for tool implementations.
 from tools import (
     analyze_symptoms,
     assess_patient_risk,
@@ -89,6 +106,8 @@ from tools import (
     lookup_drug_info,
     calculate_dosage_adjustment,
 )
+# CONNECTION: observability/ root module — build_callback_config() attaches
+# Langfuse trace_name and tags to every LLM call automatically.
 from observability.callbacks import build_callback_config
 
 
@@ -250,7 +269,7 @@ def build_command_pipeline():
         assess the patient, it calls transfer_to_pharmacology()
         to hand off control. The transfer tool returns a Command.
         """
-        print("\n    [STAGE 3.3] TRIAGE AGENT (with handoff tools)")
+        print("\n    [Step 3.3] TRIAGE AGENT (with handoff tools)")
         print("    " + "-" * 50)
 
         # Create transfer tools with current depth
@@ -322,7 +341,7 @@ Use your tools to assess, then transfer to the appropriate specialist.""")
         """
         Pharmacology agent with domain tools and transfer_to_report.
         """
-        print("\n    [STAGE 3.4] PHARMACOLOGY AGENT (with handoff tools)")
+        print("\n    [Step 3.4] PHARMACOLOGY AGENT (with handoff tools)")
         print("    " + "-" * 50)
 
         handoff = state.get("handoff_context", {})
@@ -391,7 +410,7 @@ Use your tools, then call transfer_to_report with your summary.""")
     # ── Node: report ────────────────────────────────────────────────────
     def report_node(state: CommandState) -> dict:
         """Synthesise findings into a clinical summary."""
-        print("\n    [STAGE 3.5] REPORT GENERATOR")
+        print("\n    [Step 3.5] REPORT GENERATOR")
         print("    " + "-" * 50)
 
         handoff = state.get("handoff_context", {})

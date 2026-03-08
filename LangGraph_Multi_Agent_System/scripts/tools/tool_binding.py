@@ -41,6 +41,17 @@ WHAT YOU LEARN
     4. Per-agent tool sets for separation of concerns
 
 ------------------------------------------------------------
+WHEN TO USE
+------------------------------------------------------------
+    Use tool_binding (this pattern) whenever you have multiple
+    agents that should each see only their relevant tools.
+    Over-scoping (giving agents all tools) degrades accuracy.
+
+    When NOT to use:
+    - If tool set must change at runtime based on input
+      (use dynamic_tool_selection.py instead)
+
+------------------------------------------------------------
 HOW TO RUN
 ------------------------------------------------------------
     cd D:/Agentic AI/LangGraph_Multi_Agent_System
@@ -65,8 +76,14 @@ from langgraph.prebuilt import ToolNode
 from langchain_core.messages import HumanMessage, SystemMessage
 
 # ── Project imports ─────────────────────────────────────────────────────────
+# CONNECTION: core/ root module — get_llm() centralises LLM config.
+# PatientCase is the canonical domain model used in test scenarios.
 from core.config import get_llm
 from core.models import PatientCase
+# CONNECTION: tools/ root module — these clinical tool functions are the
+# component layer. This script demonstrates HOW to scope them per-agent
+# via bind_tools() — the pattern, not the tool implementations.
+# See tools/ for what each tool actually does.
 from tools import (
     analyze_symptoms,
     assess_patient_risk,
@@ -75,6 +92,8 @@ from tools import (
     calculate_dosage_adjustment,
     lookup_clinical_guideline,
 )
+# CONNECTION: observability/ root module — build_callback_config() attaches
+# Langfuse trace_name and tags to every LLM call automatically.
 from observability.callbacks import build_callback_config
 
 

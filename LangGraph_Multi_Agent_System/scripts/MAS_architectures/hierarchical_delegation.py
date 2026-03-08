@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 ============================================================
 Hierarchical Delegation
@@ -90,13 +90,19 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 
 # -- Project imports ----------------------------------------------------------
-# NOTE: Agents are imported from the ROOT agents/ package (the "library layer").
-#       This script is a "pattern demo layer" — it builds a hierarchical
-#       delegation graph but does NOT define its own agents. See agents/.
+# CONNECTION: agents/ root module — TriageAgent, DiagnosticAgent, PharmacistAgent
+# are the Level 3 specialist agents (component layer). This script demonstrates
+# the HIERARCHICAL DELEGATION PATTERN (L3 → L2 leads → L1 executive), not agent
+# implementation. See agents/ for what each agent does internally.
+from agents import TriageAgent, PharmacistAgent, DiagnosticAgent
+# CONNECTION: core/ root module — get_llm() centralises LLM config for Level 2
+# team leads and Level 1 executive (which use raw LLM calls with system prompts).
+# PatientCase is the canonical domain model passed through state.
 from core.config import get_llm
 from core.models import PatientCase
+# CONNECTION: observability/ root module — build_callback_config() attaches
+# Langfuse tracing to every LLM call across all three hierarchy levels.
 from observability.callbacks import build_callback_config
-from agents import TriageAgent, PharmacistAgent, DiagnosticAgent
 
 
 # ============================================================

@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 ============================================================
 Reflection and Self-Critique
@@ -92,8 +92,13 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 
 # -- Project imports ----------------------------------------------------------
+# CONNECTION: core/ root module — get_llm() centralises LLM config.
+# PatientCase is the canonical domain model. The same LLM is used for both
+# the generator and the critique pass (with different system prompts).
 from core.config import get_llm
 from core.models import PatientCase
+# CONNECTION: observability/ root module — build_callback_config() attaches
+# Langfuse tracing to every LLM call (generator + critique + refinement passes).
 from observability.callbacks import build_callback_config
 
 

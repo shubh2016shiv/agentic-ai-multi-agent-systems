@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 ============================================================
 Multi-Hop Handoff with Depth Guard
@@ -64,6 +64,18 @@ WHAT YOU LEARN
     5. Cost control — fewer hops = fewer LLM calls
 
 ------------------------------------------------------------
+WHEN TO USE
+------------------------------------------------------------
+    Use multihop_depth_guard whenever you use command_handoff.py
+    or any LLM-driven routing that can chain agent calls.
+    Always add a depth guard — LLM routing chains can loop infinitely
+    without one, consuming unlimited tokens.
+
+    When NOT to use:
+    - If you use fixed-edge routing (linear_pipeline, conditional_routing)
+      those are structurally bounded and need no depth guard.
+
+------------------------------------------------------------
 HOW TO RUN
 ------------------------------------------------------------
     cd D:/Agentic AI/LangGraph_Multi_Agent_System
@@ -89,9 +101,14 @@ from langgraph.prebuilt import ToolNode
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 
 # ── Project imports ─────────────────────────────────────────────────────────
+# CONNECTION: core/ root module — get_llm() centralises LLM config.
+# PatientCase is the canonical domain model. HandoffLimitReached is the
+# domain exception raised when the depth guard trips the chain.
 from core.config import get_llm
 from core.models import PatientCase
 from core.exceptions import HandoffLimitReached
+# CONNECTION: tools/ root module — domain tool functions (component layer).
+# This script demos HOW to limit multi-hop tool chains, not how tools work.
 from tools import (
     analyze_symptoms,
     assess_patient_risk,
@@ -100,6 +117,8 @@ from tools import (
     calculate_dosage_adjustment,
     lookup_clinical_guideline,
 )
+# CONNECTION: observability/ root module — build_callback_config() attaches
+# Langfuse trace_name and tags to every LLM call automatically.
 from observability.callbacks import build_callback_config
 
 

@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 ============================================================
 Conditional Routing Handoff
@@ -47,6 +47,17 @@ WHAT YOU LEARN
     4. Two test cases through the same compiled graph
 
 ------------------------------------------------------------
+WHEN TO USE
+------------------------------------------------------------
+    Use conditional_routing when routing depends on results and
+    the logic is deterministic (inspects a field in state).
+    Zero LLM cost for routing. Easily unit-tested.
+
+    When NOT to use:
+    - If routing requires reasoning the LLM must do (use command_handoff.py)
+    - If execution order is always the same (use linear_pipeline.py)
+
+------------------------------------------------------------
 HOW TO RUN
 ------------------------------------------------------------
     cd D:/Agentic AI/LangGraph_Multi_Agent_System
@@ -72,8 +83,12 @@ from langgraph.prebuilt import ToolNode
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 
 # ── Project imports ─────────────────────────────────────────────────────────
+# CONNECTION: core/ root module — get_llm() centralises LLM config. PatientCase
+# and HandoffContext are the canonical domain models for handoff state.
 from core.config import get_llm
 from core.models import PatientCase, HandoffContext
+# CONNECTION: tools/ root module — these clinical tool functions are the component
+# layer. This script demos HOW to use them in conditional routing, not how they work.
 from tools import (
     analyze_symptoms,
     assess_patient_risk,
@@ -81,6 +96,8 @@ from tools import (
     lookup_drug_info,
     calculate_dosage_adjustment,
 )
+# CONNECTION: observability/ root module — build_callback_config() attaches
+# Langfuse trace_name and tags to every LLM call automatically.
 from observability.callbacks import build_callback_config
 
 
@@ -154,7 +171,7 @@ def build_conditional_pipeline():
         but here we use deterministic rules so the router function
         is predictable for demonstration purposes.
         """
-        print("\n    [STAGE 2.3] TRIAGE AGENT")
+        print("\n    [Step 2.3] TRIAGE AGENT")
         print("    " + "-" * 50)
 
         patient_data = state["patient_case"]
@@ -227,7 +244,7 @@ Use your tools to analyze symptoms and assess risk.""")
         Review medications. Only runs on the high_risk path.
         Reads HandoffContext from state.
         """
-        print("\n    [STAGE 2.4] PHARMACOLOGY AGENT (high-risk path)")
+        print("\n    [Step 2.4] PHARMACOLOGY AGENT (high-risk path)")
         print("    " + "-" * 50)
 
         raw_handoff = state.get("handoff_context", {})
@@ -273,7 +290,7 @@ Use your tools, then provide specific recommendations.""")
     # ── Node: report ────────────────────────────────────────────────────
     def report_node(state: ConditionalState) -> dict:
         """Synthesise specialist findings into a summary."""
-        print("\n    [STAGE 2.5] REPORT GENERATOR")
+        print("\n    [Step 2.5] REPORT GENERATOR")
         print("    " + "-" * 50)
 
         agent_outputs = [

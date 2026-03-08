@@ -33,6 +33,18 @@ WHAT YOU LEARN
     4. Validation: what happens with malformed output
 
 ------------------------------------------------------------
+WHEN TO USE
+------------------------------------------------------------
+    Use Pattern 1 (with_structured_output) when you need clean
+    validated JSON from the LLM with no other tool calls.
+
+    Use Pattern 2 (response-format tool) when the LLM must also
+    call domain tools before producing its structured output.
+
+    When NOT to use:
+    - If free-form text output is acceptable (no need for Pydantic)
+
+------------------------------------------------------------
 HOW TO RUN
 ------------------------------------------------------------
     cd D:/Agentic AI/LangGraph_Multi_Agent_System
@@ -60,9 +72,16 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.tools import tool
 
 # ── Project imports ─────────────────────────────────────────────────────────
+# CONNECTION: core/ root module — get_llm() centralises LLM config.
+# PatientCase is the canonical domain model used in test scenarios.
 from core.config import get_llm
 from core.models import PatientCase
+# CONNECTION: tools/ root module — analyze_symptoms and assess_patient_risk are
+# component-layer tools used in Pattern 2 (response-format tool).
+# This script demos HOW to force structured output from the LLM.
 from tools import analyze_symptoms, assess_patient_risk
+# CONNECTION: observability/ root module — build_callback_config() attaches
+# Langfuse trace_name and tags to every LLM call automatically.
 from observability.callbacks import build_callback_config
 
 

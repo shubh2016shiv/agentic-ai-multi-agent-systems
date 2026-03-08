@@ -45,6 +45,17 @@ WHAT YOU LEARN
     4. When to use static vs dynamic binding
 
 ------------------------------------------------------------
+WHEN TO USE
+------------------------------------------------------------
+    Use dynamic_tool_selection when the same agent may need
+    different tools depending on the runtime input (e.g. patient
+    conditions determine which tool domain is relevant).
+
+    When NOT to use:
+    - If the tool set is always the same per agent (use tool_binding.py)
+    - If you always know which agent handles which case at build time
+
+------------------------------------------------------------
 HOW TO RUN
 ------------------------------------------------------------
     cd D:/Agentic AI/LangGraph_Multi_Agent_System
@@ -72,8 +83,14 @@ from langgraph.prebuilt import ToolNode
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 
 # ── Project imports ─────────────────────────────────────────────────────────
+# CONNECTION: core/ root module — get_llm() centralises LLM config.
+# PatientCase is the canonical domain model; its conditions field drives
+# the dynamic tool registry lookup in this pattern.
 from core.config import get_llm
 from core.models import PatientCase
+# CONNECTION: tools/ root module — the full tool library is registered in
+# TOOL_REGISTRY and selected subsets are bound at runtime. This script demos
+# WHEN to bind which tools, not what the tools do. See tools/ for implementations.
 from tools import (
     analyze_symptoms,
     assess_patient_risk,
@@ -82,6 +99,8 @@ from tools import (
     calculate_dosage_adjustment,
     lookup_clinical_guideline,
 )
+# CONNECTION: observability/ root module — build_callback_config() attaches
+# Langfuse trace_name and tags to every LLM call automatically.
 from observability.callbacks import build_callback_config
 
 

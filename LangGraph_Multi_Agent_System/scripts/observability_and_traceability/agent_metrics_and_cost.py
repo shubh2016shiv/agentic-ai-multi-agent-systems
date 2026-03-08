@@ -1,4 +1,4 @@
-﻿ #!/usr/bin/env python3
+ #!/usr/bin/env python3
 """
 ============================================================
 Agent Metrics and Cost Tracking
@@ -108,9 +108,18 @@ from langgraph.prebuilt import ToolNode
 from langchain_core.messages import HumanMessage, SystemMessage
 
 # -- Project imports ----------------------------------------------------------
+# CONNECTION: core/ root module — get_llm() centralises LLM config so all nodes
+# use the same provider/model without hardcoding credentials.
 from core.config import get_llm
+# CONNECTION: observability/ root module — build_callback_config() attaches
+# Langfuse tracing to every LLM call. MetricsCollector (observability/metrics.py)
+# is the component that tracks per-agent token usage, latency, and cost.
+# This script demonstrates HOW to instrument a pipeline with MetricsCollector
+# — the pattern, not the MetricsCollector implementation itself.
 from observability.callbacks import build_callback_config
 from observability.metrics import MetricsCollector
+# CONNECTION: tools/ root module — the clinical tool functions used by agents.
+# This script records tool call metrics (latency, success/failure) on top of them.
 from tools import analyze_symptoms, assess_patient_risk, check_drug_interactions
 
 

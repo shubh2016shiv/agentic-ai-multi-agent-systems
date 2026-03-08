@@ -48,6 +48,21 @@ WHAT YOU LEARN
     4. Fallback behaviour when tools fail
 
 ------------------------------------------------------------
+WHEN TO USE
+------------------------------------------------------------
+    Use tool_error_handling patterns in any production pipeline
+    where tools can fail (network timeouts, invalid args, API errors).
+
+    Pattern 1 (handle_tool_errors=True): use when you want ToolNode
+    to capture exceptions and feed them to the LLM for self-correction.
+
+    Pattern 2 (manual try/except): use when you need explicit fallback
+    logic — retry with different args, skip the tool, or respond without it.
+
+    When NOT to use:
+    - In demos/exploratory scripts where error handling adds noise
+
+------------------------------------------------------------
 HOW TO RUN
 ------------------------------------------------------------
     cd D:/Agentic AI/LangGraph_Multi_Agent_System
@@ -76,9 +91,17 @@ from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import tool
 
 # ── Project imports ─────────────────────────────────────────────────────────
+# CONNECTION: core/ root module — get_llm() centralises LLM config.
+# PatientCase is the canonical domain model used in test scenarios.
 from core.config import get_llm
 from core.models import PatientCase
+# CONNECTION: tools/ root module — real tools from the component layer.
+# This script also defines flaky_tools (for error simulation) locally.
+# analyze_symptoms and assess_patient_risk are the healthy tools used in
+# Pattern 2 as fallback alternatives when flaky tools fail.
 from tools import analyze_symptoms, assess_patient_risk
+# CONNECTION: observability/ root module — build_callback_config() attaches
+# Langfuse trace_name and tags to every LLM call automatically.
 from observability.callbacks import build_callback_config
 
 

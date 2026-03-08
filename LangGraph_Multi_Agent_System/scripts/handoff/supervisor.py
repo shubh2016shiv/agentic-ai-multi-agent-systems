@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 ============================================================
 Supervisor Pattern Handoff
@@ -49,6 +49,19 @@ WHAT YOU LEARN
     5. Tracking completed workers to avoid redundant calls
 
 ------------------------------------------------------------
+WHEN TO USE
+------------------------------------------------------------
+    Use supervisor when one coordinator LLM should orchestrate
+    multiple worker agents dynamically based on cumulative results.
+    Most structured multi-agent routing pattern.
+
+    When NOT to use:
+    - If all workers should always run in parallel (use parallel_fanout.py)
+    - If routing is deterministic (use conditional_routing.py — zero LLM cost)
+    - For production-grade orchestration with resilience, see
+      scripts/orchestration/supervisor_orchestration/
+
+------------------------------------------------------------
 HOW TO RUN
 ------------------------------------------------------------
     cd D:/Agentic AI/LangGraph_Multi_Agent_System
@@ -74,8 +87,13 @@ from langgraph.prebuilt import ToolNode
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 
 # ── Project imports ─────────────────────────────────────────────────────────
+# CONNECTION: core/ root module — get_llm() centralises LLM config.
+# PatientCase is the canonical domain model carried through state.
 from core.config import get_llm
 from core.models import PatientCase
+# CONNECTION: tools/ root module — domain tool functions (component layer).
+# Workers in this supervisor pattern bind and invoke these tools.
+# See tools/ for implementations; this script demos the routing pattern.
 from tools import (
     analyze_symptoms,
     assess_patient_risk,
@@ -83,6 +101,8 @@ from tools import (
     lookup_drug_info,
     calculate_dosage_adjustment,
 )
+# CONNECTION: observability/ root module — build_callback_config() attaches
+# Langfuse trace_name and tags to every LLM call automatically.
 from observability.callbacks import build_callback_config
 
 
@@ -148,7 +168,7 @@ def build_supervisor_pipeline():
 
         It returns one of: "triage", "pharmacology", or "FINISH".
         """
-        print(f"\n    [STAGE 4.2] SUPERVISOR (iteration {state['iteration'] + 1})")
+        print(f"\n    [Step 4.2] SUPERVISOR (iteration {state['iteration'] + 1})")
         print("    " + "-" * 50)
 
         completed = state.get("completed_workers", [])
@@ -235,7 +255,7 @@ YOUR DECISION:"""
         The return-to-supervisor happens via add_edge(), not via
         the worker's decision.
         """
-        print("\n    [STAGE 4.3] TRIAGE WORKER")
+        print("\n    [Step 4.3] TRIAGE WORKER")
         print("    " + "-" * 50)
 
         triage_llm = llm.bind_tools(triage_tools)
@@ -273,7 +293,7 @@ Use your tools, then provide your triage assessment.""")
     # ── Node: pharmacology worker ───────────────────────────────────────
     def pharma_worker_node(state: SupervisorState) -> dict:
         """Pharmacology worker. Returns to supervisor after completion."""
-        print("\n    [STAGE 4.4] PHARMACOLOGY WORKER")
+        print("\n    [Step 4.4] PHARMACOLOGY WORKER")
         print("    " + "-" * 50)
 
         pharma_llm = llm.bind_tools(pharma_tools)
@@ -309,7 +329,7 @@ Use your tools, then provide recommendations.""")
     # ── Node: report ────────────────────────────────────────────────────
     def report_node(state: SupervisorState) -> dict:
         """Generate final report when supervisor says FINISH."""
-        print("\n    [STAGE 4.6] REPORT GENERATOR")
+        print("\n    [Step 4.6] REPORT GENERATOR")
         print("    " + "-" * 50)
 
         agent_outputs = [

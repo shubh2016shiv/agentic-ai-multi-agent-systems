@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 ============================================================
 Linear Pipeline Handoff
@@ -52,6 +52,17 @@ WHAT YOU LEARN
     5. Partial state updates — each node returns only what it changes
 
 ------------------------------------------------------------
+WHEN TO USE
+------------------------------------------------------------
+    Use linear_pipeline when agent execution order never varies.
+    This is the baseline pattern — simplest possible wiring.
+
+    When NOT to use:
+    - If routing depends on results (use conditional_routing.py)
+    - If the LLM should decide next agent (use command_handoff.py)
+    - If you need parallel execution (use parallel_fanout.py)
+
+------------------------------------------------------------
 HOW TO RUN
 ------------------------------------------------------------
     cd D:/Agentic AI/LangGraph_Multi_Agent_System
@@ -79,8 +90,14 @@ from langgraph.prebuilt import ToolNode
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 
 # ── Project imports ─────────────────────────────────────────────────────────
+# CONNECTION: core/ root module — get_llm() centralises LLM config so all agents
+# use the same provider/model. PatientCase and HandoffContext are the canonical
+# domain models; HandoffContext carries structured data between agents in state.
 from core.config import get_llm
 from core.models import PatientCase, HandoffContext
+# CONNECTION: tools/ root module — these clinical tool functions are the component
+# layer. This script demonstrates HOW to invoke them in a pipeline via ToolNode,
+# not how they work internally. See tools/ for the implementations.
 from tools import (
     analyze_symptoms,
     assess_patient_risk,
@@ -88,6 +105,8 @@ from tools import (
     lookup_drug_info,
     calculate_dosage_adjustment,
 )
+# CONNECTION: observability/ root module — build_callback_config() attaches
+# Langfuse trace_name and tags to every LLM call automatically.
 from observability.callbacks import build_callback_config
 
 
@@ -205,7 +224,7 @@ def build_pipeline():
             4. Construct a HandoffContext for the next agent.
             5. Return a partial state update.
         """
-        print("\n    [STAGE 1.2] TRIAGE AGENT")
+        print("\n    [Step 1.2] TRIAGE AGENT")
         print("    " + "-" * 50)
 
         system_msg = SystemMessage(content=(
@@ -311,7 +330,7 @@ your triage assessment. Flag issues for pharmacology review.""")
         Reads the HandoffContext written by the triage node.
         Does NOT re-read the triage agent's message history.
         """
-        print("\n    [STAGE 1.3] PHARMACOLOGY AGENT")
+        print("\n    [Step 1.3] PHARMACOLOGY AGENT")
         print("    " + "-" * 50)
 
         # Read the HandoffContext from state
@@ -409,7 +428,7 @@ Use your tools to check drug interactions and dosing. Then provide:
         Reads only the final AIMessage content from each agent —
         skips tool messages and intermediate reasoning.
         """
-        print("\n    [STAGE 1.4] REPORT GENERATOR")
+        print("\n    [Step 1.4] REPORT GENERATOR")
         print("    " + "-" * 50)
 
         agent_outputs = [

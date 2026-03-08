@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 ============================================================
 Adversarial Debate
@@ -87,8 +87,13 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 
 # -- Project imports ----------------------------------------------------------
+# CONNECTION: core/ root module — get_llm() centralises LLM config.
+# PatientCase is the canonical domain model for the clinical debate scenario.
+# All debate agents (pro, con, judge) use the same LLM with different system prompts.
 from core.config import get_llm
 from core.models import PatientCase
+# CONNECTION: observability/ root module — build_callback_config() attaches
+# Langfuse tracing to every LLM call (pro argument, con argument, judge ruling).
 from observability.callbacks import build_callback_config
 
 

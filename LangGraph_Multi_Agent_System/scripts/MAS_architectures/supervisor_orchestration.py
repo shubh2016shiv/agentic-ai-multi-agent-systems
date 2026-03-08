@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 ============================================================
 Supervisor Orchestration
@@ -84,13 +84,18 @@ from langgraph.graph.message import add_messages
 from langchain_core.messages import HumanMessage, SystemMessage
 
 # -- Project imports ----------------------------------------------------------
-# NOTE: Agents are imported from the ROOT agents/ package (the "library layer").
-#       This script is a "pattern demo layer" — it wires agents into a supervisor
-#       loop but does NOT define its own agents. See agents/ for implementations.
+# CONNECTION: agents/ root module — TriageAgent, DiagnosticAgent, PharmacistAgent
+# are pre-built reusable agent objects. This script demonstrates the SUPERVISOR
+# ARCHITECTURE PATTERN (how to route between agents), not agent implementation.
+# See agents/ for what each agent does internally.
+from agents import TriageAgent, PharmacistAgent, DiagnosticAgent
+# CONNECTION: core/ root module — get_llm() centralises LLM config for the
+# supervisor LLM. PatientCase is the canonical domain model passed through state.
 from core.config import get_llm
 from core.models import PatientCase
+# CONNECTION: observability/ root module — build_callback_config() attaches
+# Langfuse tracing to every LLM call (supervisor decisions + agent calls).
 from observability.callbacks import build_callback_config
-from agents import TriageAgent, PharmacistAgent, DiagnosticAgent
 
 
 # ============================================================

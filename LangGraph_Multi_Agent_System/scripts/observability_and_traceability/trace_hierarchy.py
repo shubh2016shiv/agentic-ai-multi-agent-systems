@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 ============================================================
 Trace Hierarchy
@@ -116,7 +116,14 @@ from langgraph.graph.message import add_messages
 from langchain_core.messages import HumanMessage, SystemMessage
 
 # -- Project imports ----------------------------------------------------------
+# CONNECTION: core/ root module — get_llm() centralises LLM config so all nodes
+# use the same provider/model without hardcoding credentials.
 from core.config import get_llm
+# CONNECTION: observability/ root module — build_callback_config() is the PRIMARY
+# entry point that attaches Langfuse tracing to every LLM call via LangChain
+# callbacks. It injects trace_name, user_id, session_id, and tags automatically.
+# get_langfuse_client() gives programmatic access to inspect traces after the run.
+# This script demonstrates HOW to wire them into a LangGraph pipeline.
 from observability.callbacks import build_callback_config
 from observability.tracer import get_langfuse_client
 

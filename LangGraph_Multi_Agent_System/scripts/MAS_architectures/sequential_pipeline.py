@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 ============================================================
 Sequential Pipeline
@@ -85,13 +85,18 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 
 # -- Project imports ----------------------------------------------------------
-# NOTE: Agents are imported from the ROOT agents/ package (the "library layer").
-#       This script is a "pattern demo layer" — it wires agents into a pipeline
-#       but does NOT define its own agents. See agents/ for implementations.
+# CONNECTION: agents/ root module — TriageAgent, DiagnosticAgent, PharmacistAgent
+# are pre-built reusable agent objects. This script demonstrates the SEQUENTIAL
+# PIPELINE ARCHITECTURE PATTERN (fixed-order agent execution), not agent design.
+# See agents/ for what each agent does internally.
+from agents import TriageAgent, PharmacistAgent, DiagnosticAgent
+# CONNECTION: core/ root module — get_llm() centralises LLM config.
+# PatientCase is the canonical domain model passed through state.
 from core.config import get_llm
 from core.models import PatientCase
+# CONNECTION: observability/ root module — build_callback_config() attaches
+# Langfuse tracing to every LLM call across the sequential pipeline.
 from observability.callbacks import build_callback_config
-from agents import TriageAgent, PharmacistAgent, DiagnosticAgent
 
 
 # ============================================================
