@@ -16,32 +16,29 @@ Each step is independently resumable and updates job status in the registry.
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import List, Tuple
 
 import structlog
 
+from ...utils.logging_utils import bind_pipeline_context
+from ..exceptions import (
+    EmbeddingBatchFailureError,
+    PDFParseError,
+)
 from ..models.chunk import ChildChunk, ParentChunk
 from ..models.document_metadata import DuplicateResolution, GuidelineMetadata
 from ..models.ingestion_job import IngestionJob, IngestionStatus
 from ..models.parsed_document import ParsedDocument
 from ..ports.chunk_store_port import AbstractParentChunkStore
+from ..ports.config_protocol import PipelineConfigProtocol
 from ..ports.document_registry_port import AbstractDocumentRegistry
 from ..ports.figure_describer_port import AbstractFigureDescriber
 from ..ports.pdf_parser_port import AbstractPDFParser
 from ..ports.text_embedder_port import AbstractTextEmbedder
 from ..ports.vector_store_port import AbstractVectorStore
-from ...config.pipeline_settings import PipelineSettings
-from ...exceptions.pipeline_exceptions import (
-    DocumentAlreadyIngestedException,
-    EmbeddingBatchFailureError,
-    PDFParseError,
-)
-from ...utils.logging_utils import bind_pipeline_context
 from .chunking_service import ChunkingService
 from .deduplication_service import DeduplicationService
 from .document_hasher import DocumentHasher
 from .pdf_sanitiser import PDFSanitiser
-
 
 logger = structlog.get_logger(__name__)
 
@@ -72,7 +69,7 @@ class IngestionOrchestrator:
         vector_store: AbstractVectorStore,
         registry: AbstractDocumentRegistry,
         chunk_store: AbstractParentChunkStore,
-        settings: PipelineSettings,
+        settings: PipelineConfigProtocol,
         hasher: DocumentHasher,
         sanitiser: PDFSanitiser,
         chunking_service: ChunkingService,
@@ -170,6 +167,7 @@ class IngestionOrchestrator:
             total_chunks=0,
             embedded_chunks=0,
             started_at=datetime.utcnow(),
+            metadata=metadata,
         )
         
         try:
@@ -183,7 +181,7 @@ class IngestionOrchestrator:
             doc = self._sanitise_document(doc)
             
             bind_pipeline_context(correlation_id=correlation_id, doc_id=doc_id, step="figures")
-            doc = self._process_figures(doc)
+            doc = self._process_figures(doc, pdf_path)
             
             bind_pipeline_context(correlation_id=correlation_id, doc_id=doc_id, step="chunk")
             parent_chunks, child_chunks = self._build_chunks(doc, metadata)
@@ -272,7 +270,7 @@ class IngestionOrchestrator:
             
         except Exception as e:
             logger.error("parsing_failed", error=str(e), error_type=type(e).__name__)
-            raise PDFParseError(doc_id, str(pdf_path), e)
+            raise PDFParseError(doc_id, str(pdf_path), e) from e
 
     def _sanitise_document(self, doc: ParsedDocument) -> ParsedDocument:
         """Sanitise document content."""
@@ -294,23 +292,103 @@ class IngestionOrchestrator:
         
         return doc
 
-    def _process_figures(self, doc: ParsedDocument) -> ParsedDocument:
-        """Process figures by generating descriptions."""
+    def _process_figures(self, doc: ParsedDocument, pdf_path: Path) -> ParsedDocument:
+        """
+        Process figures by generating descriptions using vision LLM.
+        
+        For each figure with description_pending=True, crops the bounding box
+        region from the PDF, converts to PNG, and calls the figure describer.
+        
+        Args:
+            doc: ParsedDocument with figures
+            pdf_path: Path to the source PDF file
+        
+        Returns:
+            ParsedDocument with figure descriptions populated
+        """
         logger.info("processing_figures", total_figures=len(doc.figures))
+        
+        if not doc.figures:
+            logger.info("no_figures_to_process")
+            return doc
+        
+        try:
+            import fitz  # pyright: ignore[reportMissingImports]
+        except ImportError as e:
+            logger.warning(
+                "pymupdf_not_available_skipping_figure_processing",
+                error=str(e),
+            )
+            return doc
         
         figures_processed = 0
         figures_pending = 0
+        figures_failed = 0
         
-        for figure in doc.figures:
-            if figure.description_pending:
-                figures_pending += 1
-            else:
-                figures_processed += 1
+        pdf_doc = None
+        try:
+            pdf_doc = fitz.open(str(pdf_path))
+            
+            for figure in doc.figures:
+                if not figure.description_pending:
+                    figures_processed += 1
+                    continue
+                
+                try:
+                    page = pdf_doc[figure.page_number - 1]
+                    
+                    rect = fitz.Rect(
+                        figure.bounding_box.x,
+                        figure.bounding_box.y,
+                        figure.bounding_box.x + figure.bounding_box.width,
+                        figure.bounding_box.y + figure.bounding_box.height,
+                    )
+                    
+                    dpi = self.settings.figure_crop_dpi
+                    zoom = dpi / 72.0
+                    mat = fitz.Matrix(zoom, zoom)
+                    
+                    pix = page.get_pixmap(matrix=mat, clip=rect)
+                    
+                    image_bytes = pix.tobytes("png")
+                    
+                    description = self.figure_describer.describe_figure(
+                        image=image_bytes,
+                        figure_type=figure.figure_type,
+                        caption=figure.caption,
+                    )
+                    
+                    figure.description = description
+                    figure.description_pending = False
+                    
+                    figures_processed += 1
+                    
+                    logger.debug(
+                        "figure_described",
+                        figure_id=figure.figure_id,
+                        caption=figure.caption[:50],
+                    )
+                    
+                except Exception as e:
+                    logger.warning(
+                        "figure_description_failed",
+                        figure_id=figure.figure_id,
+                        caption=figure.caption[:50],
+                        error=str(e),
+                        error_type=type(e).__name__,
+                    )
+                    figures_failed += 1
+                    figures_pending += 1
+        
+        finally:
+            if pdf_doc:
+                pdf_doc.close()
         
         logger.info(
             "figure_processing_complete",
             processed=figures_processed,
             pending=figures_pending,
+            failed=figures_failed,
         )
         
         return doc
@@ -319,7 +397,7 @@ class IngestionOrchestrator:
         self,
         doc: ParsedDocument,
         metadata: GuidelineMetadata,
-    ) -> Tuple[List[ParentChunk], List[ChildChunk]]:
+    ) -> tuple[list[ParentChunk], list[ChildChunk]]:
         """Build parent and child chunks."""
         logger.info("building_chunks")
         
@@ -335,7 +413,7 @@ class IngestionOrchestrator:
         
         return parent_chunks, child_chunks
 
-    def _deduplicate_chunks(self, chunks: List[ChildChunk]) -> List[ChildChunk]:
+    def _deduplicate_chunks(self, chunks: list[ChildChunk]) -> list[ChildChunk]:
         """Remove duplicate chunks."""
         logger.info("deduplicating_chunks", total_chunks=len(chunks))
         
@@ -349,7 +427,7 @@ class IngestionOrchestrator:
         
         return unique_chunks
 
-    def _embed_chunks(self, chunks: List[ChildChunk]) -> List[ChildChunk]:
+    def _embed_chunks(self, chunks: list[ChildChunk]) -> list[ChildChunk]:
         """Generate embeddings for chunks."""
         logger.info("embedding_chunks", total_chunks=len(chunks))
         
@@ -367,12 +445,12 @@ class IngestionOrchestrator:
             
         except Exception as e:
             logger.error("embedding_failed", error=str(e), error_type=type(e).__name__)
-            raise EmbeddingBatchFailureError(list(range(len(chunks))), e)
+            raise EmbeddingBatchFailureError(list(range(len(chunks))), e) from e
 
     def _persist_chunks(
         self,
-        parent_chunks: List[ParentChunk],
-        child_chunks: List[ChildChunk],
+        parent_chunks: list[ParentChunk],
+        child_chunks: list[ChildChunk],
     ) -> None:
         """Persist chunks to storage."""
         logger.info(

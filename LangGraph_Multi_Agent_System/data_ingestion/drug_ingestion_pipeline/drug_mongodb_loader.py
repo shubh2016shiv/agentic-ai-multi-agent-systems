@@ -38,7 +38,9 @@ from pymongo.errors import BulkWriteError
 from data_ingestion.drug_ingestion_pipeline.drug_standardization_models import (
     StandardizedDrugDocument,
 )
-from data_ingestion.mongodb_connection_manager import MongoDBConnectionManager
+from data_ingestion.connections.mongodb_connection_manager import (
+    MongoDBConnectionManager,
+)
 
 logger = logging.getLogger(__name__)
 

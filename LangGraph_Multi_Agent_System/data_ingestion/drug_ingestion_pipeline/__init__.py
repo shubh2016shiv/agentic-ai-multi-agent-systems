@@ -29,7 +29,7 @@ Data Flow:
     MongoDB 'drugs' collection
 
 Quick Start:
-    from data_ingestion.mongodb_connection_manager import MongoDBConnectionManager
+    from data_ingestion.connections.mongodb_connection_manager import MongoDBConnectionManager
     from data_ingestion.drug_ingestion_pipeline import DrugIngestionOrchestrator
 
     with MongoDBConnectionManager() as connection_manager:

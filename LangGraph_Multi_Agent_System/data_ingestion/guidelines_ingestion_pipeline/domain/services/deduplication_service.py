@@ -17,7 +17,7 @@ from ..models.ingestion_job import IngestionStatus
 from ..models.parsed_document import ParsedDocument
 from ..ports.document_registry_port import AbstractDocumentRegistry
 from ..ports.vector_store_port import AbstractVectorStore
-from ...config.pipeline_settings import PipelineSettings
+from ..ports.config_protocol import PipelineConfigProtocol
 
 
 logger = structlog.get_logger(__name__)
@@ -30,14 +30,14 @@ class DeduplicationService:
     Dependencies:
         - AbstractVectorStore (injected)
         - AbstractDocumentRegistry (injected)
-        - PipelineSettings (injected)
+        - PipelineConfigProtocol (injected)
     """
 
     def __init__(
         self,
         vector_store: AbstractVectorStore,
         registry: AbstractDocumentRegistry,
-        settings: PipelineSettings,
+        settings: PipelineConfigProtocol,
     ):
         """
         Initialize the deduplication service.
@@ -108,6 +108,8 @@ class DeduplicationService:
         Remove chunks that already exist in the vector store.
         
         Layer 2 of deduplication strategy.
+        Uses a single batch lookup (``batch_chunk_exists``) instead of
+        per-chunk queries to avoid the N+1 query pattern.
         
         Args:
             chunks: List of ChildChunk objects to check
@@ -115,19 +117,14 @@ class DeduplicationService:
         Returns:
             Filtered list containing only new chunks
         """
-        new_chunks = []
-        duplicate_count = 0
-        
-        for chunk in chunks:
-            if self.vector_store.chunk_exists(chunk.chunk_id):
-                duplicate_count += 1
-                logger.debug(
-                    "chunk_duplicate_filtered",
-                    chunk_id=chunk.chunk_id,
-                    section_heading=chunk.section_heading,
-                )
-            else:
-                new_chunks.append(chunk)
+        if not chunks:
+            return []
+
+        all_ids = [c.chunk_id for c in chunks]
+        existing_ids = self.vector_store.batch_chunk_exists(all_ids)
+
+        new_chunks = [c for c in chunks if c.chunk_id not in existing_ids]
+        duplicate_count = len(chunks) - len(new_chunks)
         
         if duplicate_count > 0:
             logger.info(

@@ -30,7 +30,9 @@ PIPELINE EXECUTION FLOW
     Phase 4  REPORT:     Compile and return DrugIngestionPipelineResult.
 
 Usage:
-    from data_ingestion.mongodb_connection_manager import MongoDBConnectionManager
+    from data_ingestion.connections.mongodb_connection_manager import (
+    MongoDBConnectionManager,
+)
     from data_ingestion.drug_ingestion_pipeline import DrugIngestionOrchestrator
 
     with MongoDBConnectionManager() as connection_manager:
@@ -61,7 +63,9 @@ from data_ingestion.drug_ingestion_pipeline.drug_record_transformer import (
 from data_ingestion.drug_ingestion_pipeline.drug_standardization_models import (
     DrugIngestionPipelineResult,
 )
-from data_ingestion.mongodb_connection_manager import MongoDBConnectionManager
+from data_ingestion.connections.mongodb_connection_manager import (
+    MongoDBConnectionManager,
+)
 
 logger = logging.getLogger(__name__)
 

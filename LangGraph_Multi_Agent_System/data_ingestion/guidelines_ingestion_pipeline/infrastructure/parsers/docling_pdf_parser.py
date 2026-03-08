@@ -95,10 +95,10 @@ class DoclingPDFParser(AbstractPDFParser):
         try:
             result = self._converter.convert(str(pdf_path))
         except PermissionError as exc:
-            raise PDFPasswordProtectedError(doc_id="", pdf_name=pdf_path.name, cause=exc)
+            raise PDFPasswordProtectedError(doc_id="", pdf_name=pdf_path.name, cause=exc) from exc
         except Exception as exc:
             logger.error("docling_conversion_failed", error=str(exc))
-            raise PDFParseError(doc_id="", pdf_name=pdf_path.name, cause=exc)
+            raise PDFParseError(doc_id="", pdf_name=pdf_path.name, cause=exc) from exc
 
         try:
             markdown = result.document.export_to_markdown()
@@ -134,7 +134,7 @@ class DoclingPDFParser(AbstractPDFParser):
 
         except Exception as exc:
             logger.error("docling_extraction_failed", error=str(exc))
-            raise PDFParseError(doc_id="", pdf_name=pdf_path.name, cause=exc)
+            raise PDFParseError(doc_id="", pdf_name=pdf_path.name, cause=exc) from exc
 
     def get_parser_version(self) -> str:
         """

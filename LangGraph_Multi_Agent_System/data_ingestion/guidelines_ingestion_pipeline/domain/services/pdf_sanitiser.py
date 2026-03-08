@@ -4,7 +4,7 @@ PDF content sanitisation service.
 Strips header/footer noise, validates section ordering, and cleans up
 artifacts from PDF parsing that would pollute semantic retrieval.
 
-Configured via PipelineSettings. No external I/O dependencies.
+Configured via PipelineConfigProtocol. No external I/O dependencies.
 """
 
 import re
@@ -13,7 +13,7 @@ from typing import List
 import structlog
 
 from ..models.parsed_document import ParsedSection
-from ...config.pipeline_settings import PipelineSettings
+from ..ports.config_protocol import PipelineConfigProtocol
 
 
 logger = structlog.get_logger(__name__)
@@ -24,10 +24,10 @@ class PDFSanitiser:
     Sanitises parsed PDF content by removing headers, footers, and noise.
     
     Dependencies:
-        - PipelineSettings (injected) for regex patterns
+        - PipelineConfigProtocol (injected) for regex patterns
     """
 
-    def __init__(self, settings: PipelineSettings):
+    def __init__(self, settings: PipelineConfigProtocol):
         """
         Initialize the PDF sanitiser.
         

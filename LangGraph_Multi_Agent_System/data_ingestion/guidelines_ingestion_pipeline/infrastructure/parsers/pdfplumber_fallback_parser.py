@@ -100,9 +100,9 @@ class PDFPlumberFallbackParser(AbstractPDFParser):
         except Exception as exc:
             # Catch pdfminer's PDFPasswordIncorrect by name to avoid importing it
             if type(exc).__name__ == "PDFPasswordIncorrect":
-                raise PDFPasswordProtectedError(doc_id="", pdf_name=pdf_path.name)
+                raise PDFPasswordProtectedError(doc_id="", pdf_name=pdf_path.name, cause=exc) from exc
             logger.error("pdfplumber_parse_failed", error=str(exc), error_type=type(exc).__name__)
-            raise PDFParseError(doc_id="", pdf_name=pdf_path.name, cause=exc)
+            raise PDFParseError(doc_id="", pdf_name=pdf_path.name, cause=exc) from exc
 
     def get_parser_version(self) -> str:
         """

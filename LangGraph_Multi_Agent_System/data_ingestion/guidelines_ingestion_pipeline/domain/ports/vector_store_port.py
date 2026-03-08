@@ -6,7 +6,7 @@ Weaviate, etc.) that store and retrieve embedded child chunks.
 """
 
 from abc import ABC, abstractmethod
-from typing import List
+from typing import List, Set
 
 from ..models.chunk import ChildChunk
 
@@ -39,7 +39,24 @@ class AbstractVectorStore(ABC):
         Returns:
             True if the chunk exists, False otherwise
         """
-        raise NotImplementedError("Subclasses must implement chunk_exists()")
+        ...
+
+    @abstractmethod
+    def batch_chunk_exists(self, chunk_ids: List[str]) -> Set[str]:
+        """
+        Check which chunk IDs already exist in the vector store.
+
+        This is the batch variant of ``chunk_exists()`` and should be
+        preferred whenever multiple IDs need to be checked (avoids the
+        N+1 query pattern).
+
+        Args:
+            chunk_ids: List of chunk IDs to check.
+
+        Returns:
+            Set of chunk IDs that already exist in the store.
+        """
+        ...
 
     @abstractmethod
     def get_chunks_by_doc_id(self, doc_id: str) -> List[ChildChunk]:

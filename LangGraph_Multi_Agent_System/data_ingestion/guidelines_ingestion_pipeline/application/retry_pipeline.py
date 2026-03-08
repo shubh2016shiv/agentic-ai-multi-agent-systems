@@ -7,14 +7,17 @@ Provides targeted retry capabilities for:
 - Figures with pending descriptions
 """
 
+from pathlib import Path
 from typing import List
 
 import structlog
 
 from ..config.pipeline_settings import PipelineSettings
+from ..domain.exceptions import RegistryError
 from ..domain.models.ingestion_job import IngestionJob, IngestionStatus
 from ..domain.ports.document_registry_port import AbstractDocumentRegistry
 from ..domain.ports.vector_store_port import AbstractVectorStore
+from ..domain.services.ingestion_orchestrator import IngestionOrchestrator
 
 
 logger = structlog.get_logger(__name__)
@@ -27,6 +30,7 @@ class RetryPipeline:
     Dependencies:
         - AbstractDocumentRegistry (injected)
         - AbstractVectorStore (injected)
+        - IngestionOrchestrator (injected)
         - PipelineSettings (injected)
     """
 
@@ -34,6 +38,7 @@ class RetryPipeline:
         self,
         registry: AbstractDocumentRegistry,
         vector_store: AbstractVectorStore,
+        orchestrator: IngestionOrchestrator,
         settings: PipelineSettings,
     ):
         """
@@ -42,10 +47,12 @@ class RetryPipeline:
         Args:
             registry: Document registry for job tracking
             vector_store: Vector store for chunk queries
+            orchestrator: Ingestion orchestrator to re-run jobs
             settings: Pipeline configuration
         """
         self.registry = registry
         self.vector_store = vector_store
+        self.orchestrator = orchestrator
         self.settings = settings
 
     def retry_all_failed_jobs(self) -> List[IngestionJob]:
@@ -80,6 +87,14 @@ class RetryPipeline:
                 )
                 continue
             
+            if not job.metadata:
+                logger.error(
+                    "job_missing_metadata_cannot_retry",
+                    job_id=job.job_id,
+                    doc_id=job.doc_id,
+                )
+                continue
+            
             logger.info(
                 "retrying_job",
                 job_id=job.job_id,
@@ -87,13 +102,44 @@ class RetryPipeline:
                 failed_chunks=len(job.failed_chunk_indices),
             )
             
-            self.registry.update_job_status(
-                job.job_id,
-                IngestionStatus.RUNNING,
-                retry_count=job.retry_count + 1,
-            )
-            
-            retried_jobs.append(job)
+            try:
+                pdf_path = Path(job.metadata.pdf_source_path) / job.metadata.pdf_name
+                
+                if not pdf_path.exists():
+                    logger.error(
+                        "pdf_not_found_cannot_retry",
+                        job_id=job.job_id,
+                        pdf_path=str(pdf_path),
+                    )
+                    continue
+                
+                updated_job = self.orchestrator.orchestrate(
+                    pdf_path=pdf_path,
+                    metadata=job.metadata,
+                )
+                
+                retried_jobs.append(updated_job)
+                
+                logger.info(
+                    "job_retry_complete",
+                    job_id=updated_job.job_id,
+                    status=updated_job.status.value,
+                )
+                
+            except Exception as e:
+                logger.error(
+                    "job_retry_failed",
+                    job_id=job.job_id,
+                    error=str(e),
+                    error_type=type(e).__name__,
+                )
+                
+                self.registry.update_job_status(
+                    job.job_id,
+                    IngestionStatus.FAILED,
+                    retry_count=job.retry_count + 1,
+                    error_message=str(e),
+                )
         
         logger.info(
             "retry_all_failed_jobs_complete",
@@ -126,15 +172,23 @@ class RetryPipeline:
             from ..exceptions.pipeline_exceptions import RegistryJobNotFoundError
             raise RegistryJobNotFoundError(job_id)
         
-        self.registry.update_job_status(
-            job.job_id,
-            IngestionStatus.RUNNING,
-            retry_count=job.retry_count + 1,
+        if not job.metadata:
+            logger.error(
+                "job_missing_metadata_cannot_retry",
+                job_id=job.job_id,
+            )
+            raise RegistryError("Job metadata missing for retry", job_id=job.job_id)
+        
+        pdf_path = Path(job.metadata.pdf_source_path) / job.metadata.pdf_name
+        
+        updated_job = self.orchestrator.orchestrate(
+            pdf_path=pdf_path,
+            metadata=job.metadata,
         )
         
         logger.info("retry_specific_job_complete", job_id=job_id)
         
-        return job
+        return updated_job
 
     def get_retry_queue_stats(self) -> dict:
         """

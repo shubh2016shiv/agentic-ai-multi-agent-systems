@@ -9,12 +9,14 @@ context to the LLM.
 from typing import List, Optional
 
 import structlog
-from pymongo import MongoClient
-from pymongo.errors import ConnectionFailure
 
+from data_ingestion.connections.mongodb_connection_manager import (
+    MongoDBConnectionManager,
+)
 from ...domain.models.chunk import ParentChunk
 from ...domain.ports.chunk_store_port import AbstractParentChunkStore
 from ...exceptions.pipeline_exceptions import RegistryConnectionError
+from ...utils.retry_utils import retry_with_exponential_backoff
 
 
 logger = structlog.get_logger(__name__)
@@ -23,38 +25,50 @@ logger = structlog.get_logger(__name__)
 class MongoParentChunkStore(AbstractParentChunkStore):
     """
     MongoDB-based storage for parent chunks.
-    
+
+    Receives a ``MongoDBConnectionManager`` via constructor injection rather
+    than creating its own ``MongoClient``.  Sharing the same manager instance
+    as ``MongoDocumentRegistry`` means both components use one connection pool
+    against the same MongoDB server.
+
     Features:
     - Persistent parent chunk storage
     - Efficient retrieval by parent_chunk_id or doc_id
     """
 
-    def __init__(self, mongodb_uri: str, database_name: str, collection_name: str):
+    def __init__(
+        self,
+        connection_manager: MongoDBConnectionManager,
+        collection_name: str,
+    ) -> None:
         """
-        Initialize the MongoDB parent chunk store.
-        
+        Initialise the chunk store.
+
         Args:
-            mongodb_uri: MongoDB connection URI
-            database_name: Database name
-            collection_name: Collection name for parent chunks
+            connection_manager: Shared MongoDB connection manager.
+            collection_name: Name of the collection used to persist parent chunks.
+
+        Raises:
+            RegistryConnectionError: If initial index creation fails.
         """
         try:
-            self.client = MongoClient(mongodb_uri)
-            self.db = self.client[database_name]
-            self.collection = self.db[collection_name]
-            
+            self.collection = connection_manager.get_collection(collection_name)
+
             self.collection.create_index("parent_chunk_id", unique=True)
             self.collection.create_index("doc_id")
-            
+
             logger.info(
                 "mongo_parent_chunk_store_initialized",
-                database=database_name,
                 collection=collection_name,
             )
-            
-        except ConnectionFailure as e:
-            raise RegistryConnectionError(registry_uri=mongodb_uri, cause=e)
 
+        except Exception as e:
+            raise RegistryConnectionError(registry_uri="mongodb", cause=e) from e
+
+    @retry_with_exponential_backoff(
+        max_attempts=3,
+        retryable_exceptions=(ConnectionError, TimeoutError),
+    )
     def save_parent_chunk(self, chunk: ParentChunk) -> None:
         """
         Save a parent chunk to MongoDB.
@@ -95,7 +109,7 @@ class MongoParentChunkStore(AbstractParentChunkStore):
                 parent_chunk_id=chunk.parent_chunk_id,
                 error=str(e),
             )
-            raise RegistryConnectionError(registry_uri="mongodb", cause=e)
+            raise RegistryConnectionError(registry_uri="mongodb", cause=e) from e
 
     def get_parent_chunk(self, parent_chunk_id: str) -> Optional[ParentChunk]:
         """

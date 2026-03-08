@@ -7,9 +7,11 @@ per-chunk success/failure for granular retry.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import List, Optional
+
+from .document_metadata import GuidelineMetadata
 
 
 class IngestionStatus(Enum):
@@ -44,7 +46,8 @@ class IngestionJob:
     embedded_chunks: int
     failed_chunk_indices: List[int] = field(default_factory=list)
     figures_pending: int = 0
-    started_at: datetime = field(default_factory=datetime.utcnow)
+    started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     completed_at: Optional[datetime] = None
     error_message: Optional[str] = None
     retry_count: int = 0
+    metadata: Optional[GuidelineMetadata] = None

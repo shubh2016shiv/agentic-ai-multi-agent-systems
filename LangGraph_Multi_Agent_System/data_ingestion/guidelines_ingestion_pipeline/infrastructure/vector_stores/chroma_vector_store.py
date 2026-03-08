@@ -7,18 +7,22 @@ write, they're marked 'committed'. On startup, any pending entries are replayed.
 """
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Set
 
-import chromadb
 import structlog
 
-from ...domain.models.chunk import ChildChunk
+from data_ingestion.connections.chroma_connection_manager import (
+    ChromaConnectionManager,
+)
+from ...domain.models.chunk import ChildChunk, ChunkMetadata, ChunkType
 from ...domain.ports.vector_store_port import AbstractVectorStore
 from ...exceptions.pipeline_exceptions import (
     VectorStoreDiskFullError,
     VectorStoreWriteError,
 )
+from ...utils.retry_utils import retry_with_exponential_backoff
 
 
 logger = structlog.get_logger(__name__)
@@ -27,7 +31,12 @@ logger = structlog.get_logger(__name__)
 class ChromaVectorStore(AbstractVectorStore):
     """
     ChromaDB-based vector store with Write-Ahead Log for resilience.
-    
+
+    Receives a ``ChromaConnectionManager`` via constructor injection rather
+    than creating its own ``chromadb.PersistentClient``.  This satisfies the
+    Dependency Inversion Principle: the vector store depends on the stable
+    connection abstraction, not on the ChromaDB client API directly.
+
     Features:
     - Write-Ahead Log (WAL) for crash recovery
     - Batched writes for performance
@@ -36,47 +45,37 @@ class ChromaVectorStore(AbstractVectorStore):
 
     def __init__(
         self,
-        chroma_path: str,
+        connection_manager: ChromaConnectionManager,
         collection_name: str,
         wal_file_path: str,
         batch_size: int = 50,
-        hnsw_construction_ef: int = 200,
-        hnsw_m: int = 48,
-    ):
+    ) -> None:
         """
-        Initialize the ChromaDB vector store.
-        
+        Initialise the ChromaDB vector store.
+
         Args:
-            chroma_path: Path to ChromaDB persistence directory
-            collection_name: Name of the collection
-            wal_file_path: Path to Write-Ahead Log file
-            batch_size: Number of chunks to write per batch
-            hnsw_construction_ef: HNSW index construction parameter
-            hnsw_m: HNSW index M parameter
+            connection_manager: Shared ChromaDB connection manager.
+            collection_name: Name of the ChromaDB collection.
+            wal_file_path: Path to the Write-Ahead Log file.
+            batch_size: Number of chunks to write per batch.
         """
-        self.chroma_path = chroma_path
         self.collection_name = collection_name
         self.wal_file_path = Path(wal_file_path)
         self.batch_size = batch_size
-        
-        self.client = chromadb.PersistentClient(path=chroma_path)
-        self.collection = self.client.get_or_create_collection(
-            name=collection_name,
-            metadata={
-                "hnsw:space": "cosine",
-                "hnsw:construction_ef": hnsw_construction_ef,
-                "hnsw:M": hnsw_m,
-            },
-        )
-        
+
+        self.collection = connection_manager.get_or_create_collection(collection_name)
+
         self._replay_wal()
-        
+
         logger.info(
             "chroma_vector_store_initialized",
             collection_name=collection_name,
-            chroma_path=chroma_path,
         )
 
+    @retry_with_exponential_backoff(
+        max_attempts=3,
+        retryable_exceptions=(ConnectionError, TimeoutError, OSError),
+    )
     def upsert_chunks(self, chunks: List[ChildChunk]) -> None:
         """
         Insert or update chunks in the vector store.
@@ -114,15 +113,15 @@ class ChromaVectorStore(AbstractVectorStore):
                 
             except OSError as e:
                 if "disk full" in str(e).lower() or "no space" in str(e).lower():
-                    raise VectorStoreDiskFullError()
-                raise VectorStoreWriteError(chunk_ids=[c.chunk_id for c in batch], cause=e)
+                    raise VectorStoreDiskFullError() from e
+                raise VectorStoreWriteError(chunk_ids=[c.chunk_id for c in batch], cause=e) from e
             except Exception as e:
                 logger.error(
                     "chroma_batch_write_failed",
                     error=str(e),
                     error_type=type(e).__name__,
                 )
-                raise VectorStoreWriteError(chunk_ids=[c.chunk_id for c in batch], cause=e)
+                raise VectorStoreWriteError(chunk_ids=[c.chunk_id for c in batch], cause=e) from e
         
         logger.info("chroma_upsert_complete", chunks_written=len(chunks))
 
@@ -143,6 +142,32 @@ class ChromaVectorStore(AbstractVectorStore):
             logger.error("chunk_exists_check_failed", chunk_id=chunk_id, error=str(e))
             return False
 
+    def batch_chunk_exists(self, chunk_ids: List[str]) -> Set[str]:
+        """
+        Check which chunk IDs already exist — single ChromaDB GET call.
+
+        Args:
+            chunk_ids: IDs to check.
+
+        Returns:
+            Set of IDs that already exist in the collection.
+        """
+        if not chunk_ids:
+            return set()
+
+        try:
+            results = self.collection.get(ids=chunk_ids, include=[])
+            existing: Set[str] = set(results["ids"])
+            logger.debug(
+                "batch_chunk_exists_complete",
+                requested=len(chunk_ids),
+                found=len(existing),
+            )
+            return existing
+        except Exception as e:
+            logger.error("batch_chunk_exists_failed", error=str(e))
+            return set()
+
     def get_chunks_by_doc_id(self, doc_id: str) -> List[ChildChunk]:
         """
         Retrieve all chunks for a document.
@@ -160,12 +185,17 @@ class ChromaVectorStore(AbstractVectorStore):
             )
             
             chunks = []
-            for i in range(len(results["ids"])):
+            for chunk_id, embedding, content, metadata in zip(
+                results["ids"],
+                results["embeddings"],
+                results["documents"],
+                results["metadatas"],
+            ):
                 chunk = self._metadata_to_chunk(
-                    chunk_id=results["ids"][i],
-                    embedding=results["embeddings"][i],
-                    content=results["documents"][i],
-                    metadata=results["metadatas"][i],
+                    chunk_id=chunk_id,
+                    embedding=embedding,
+                    content=content,
+                    metadata=metadata,
                 )
                 chunks.append(chunk)
             
@@ -218,7 +248,7 @@ class ChromaVectorStore(AbstractVectorStore):
             
         except Exception as e:
             logger.error("mark_superseded_failed", doc_id=doc_id, error=str(e))
-            raise VectorStoreWriteError(chunk_ids=[], cause=e)
+            raise VectorStoreWriteError(chunk_ids=[], cause=e) from e
 
     def semantic_similarity_search(
         self,
@@ -316,8 +346,6 @@ class ChromaVectorStore(AbstractVectorStore):
         metadata: dict,
     ) -> ChildChunk:
         """Convert ChromaDB metadata dict to ChildChunk (simplified)."""
-        from ...domain.models.chunk import ChunkMetadata, ChunkType
-        from datetime import datetime
         
         chunk_metadata = ChunkMetadata(
             pdf_name=metadata.get("pdf_name", ""),
@@ -329,7 +357,7 @@ class ChromaVectorStore(AbstractVectorStore):
             parser_version="",
             embedding_model="",
             pipeline_version="",
-            ingested_at=datetime.utcnow(),
+            ingested_at=datetime.now(timezone.utc),
             is_superseded=metadata.get("is_superseded", False),
         )
         

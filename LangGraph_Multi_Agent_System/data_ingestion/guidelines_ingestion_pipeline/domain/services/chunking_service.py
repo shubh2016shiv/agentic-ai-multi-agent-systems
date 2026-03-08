@@ -9,15 +9,16 @@ Implements the parent-child chunking strategy where:
 """
 
 from datetime import datetime
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import structlog
+from transformers import AutoTokenizer
 
 from ..models.chunk import ChildChunk, ChunkMetadata, ChunkType, ParentChunk
 from ..models.document_metadata import GuidelineMetadata
 from ..models.parsed_document import ParsedDocument, ParsedFigure, ParsedSection, ParsedTable
-from ...config.pipeline_settings import PipelineSettings
-from ...exceptions.pipeline_exceptions import ChunkTokenLimitExceededError, EmptyChunkError
+from ..ports.config_protocol import PipelineConfigProtocol
+from ..exceptions import ChunkTokenLimitExceededError, EmptyChunkError
 from .document_hasher import DocumentHasher
 
 
@@ -29,11 +30,11 @@ class ChunkingService:
     Builds parent-child chunk hierarchies from parsed documents.
     
     Dependencies:
-        - PipelineSettings (injected)
+        - PipelineConfigProtocol (injected)
         - DocumentHasher (injected)
     """
 
-    def __init__(self, settings: PipelineSettings, hasher: DocumentHasher):
+    def __init__(self, settings: PipelineConfigProtocol, hasher: DocumentHasher):
         """
         Initialize the chunking service.
         
@@ -43,6 +44,23 @@ class ChunkingService:
         """
         self.settings = settings
         self.hasher = hasher
+        
+        try:
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                settings.embedding_model_name,
+                use_fast=True,
+            )
+            logger.info(
+                "tokenizer_initialized",
+                model_name=settings.embedding_model_name,
+            )
+        except Exception as e:
+            logger.warning(
+                "tokenizer_initialization_failed_falling_back_to_char_estimate",
+                model_name=settings.embedding_model_name,
+                error=str(e),
+            )
+            self.tokenizer = None
 
     def build_parent_child_chunks(
         self,
@@ -96,7 +114,7 @@ class ChunkingService:
             
             parent_buffer.append(section)
             
-            estimated_tokens = self._estimate_tokens(section.content)
+            estimated_tokens = self._count_tokens(section.content)
             if estimated_tokens >= self.settings.parent_chunk_max_tokens:
                 parent, children = self._finalize_parent_chunk(
                     parent_buffer,
@@ -168,13 +186,13 @@ class ChunkingService:
         page_end: int,
         base_metadata: ChunkMetadata,
         child_start_index: int,
-    ) -> Tuple[ParentChunk, List[ChildChunk]]:
+    ) -> Tuple[Optional[ParentChunk], List[ChildChunk]]:
         """Create parent chunk and split into child chunks."""
         if not sections:
             return None, []
         
         parent_content = "\n\n".join(s.content for s in sections)
-        parent_token_count = self._estimate_tokens(parent_content)
+        parent_token_count = self._count_tokens(parent_content)
         
         if parent_token_count < self.settings.child_chunk_min_tokens:
             logger.debug(
@@ -237,7 +255,7 @@ class ChunkingService:
         overlap_buffer = []
         
         for sentence in sentences:
-            sentence_tokens = self._estimate_tokens(sentence)
+            sentence_tokens = self._count_tokens(sentence)
             
             if current_tokens + sentence_tokens > self.settings.child_chunk_max_tokens:
                 if current_chunk:
@@ -268,14 +286,14 @@ class ChunkingService:
                     overlap_size = int(len(current_chunk) * self.settings.child_chunk_overlap_ratio)
                     overlap_buffer = current_chunk[-overlap_size:] if overlap_size > 0 else []
                     current_chunk = overlap_buffer + [sentence]
-                    current_tokens = sum(self._estimate_tokens(s) for s in current_chunk)
+                    current_tokens = sum(self._count_tokens(s) for s in current_chunk)
             else:
                 current_chunk.append(sentence)
                 current_tokens += sentence_tokens
         
         if current_chunk:
             chunk_text = ". ".join(current_chunk) + "."
-            if self._estimate_tokens(chunk_text) >= self.settings.child_chunk_min_tokens:
+            if self._count_tokens(chunk_text) >= self.settings.child_chunk_min_tokens:
                 chunk_id = self.hasher.compute_chunk_id(
                     section_heading,
                     chunk_text,
@@ -327,7 +345,7 @@ class ChunkingService:
             section_heading=table.caption,
             section_depth=0,
             chunk_index=chunk_index,
-            token_count=self._estimate_tokens(content),
+            token_count=self._count_tokens(content),
             confidence_score=1.0 if table.validation_passed else 0.8,
             is_ocr_sourced=False,
             metadata=base_metadata,
@@ -364,7 +382,7 @@ class ChunkingService:
             section_heading=figure.caption,
             section_depth=0,
             chunk_index=chunk_index,
-            token_count=self._estimate_tokens(content),
+            token_count=self._count_tokens(content),
             confidence_score=0.9 if figure.description else 0.5,
             is_ocr_sourced=False,
             metadata=base_metadata,
@@ -390,6 +408,25 @@ class ChunkingService:
             is_superseded=False,
         )
 
-    def _estimate_tokens(self, text: str) -> int:
-        """Rough token estimation (4 chars per token)."""
-        return len(text) // 4
+    def _count_tokens(self, text: str) -> int:
+        """
+        Count tokens in text using the embedding model's tokenizer.
+        
+        Args:
+            text: Text to tokenize
+        
+        Returns:
+            Token count
+        """
+        if self.tokenizer is not None:
+            try:
+                tokens = self.tokenizer.encode(text, add_special_tokens=True)
+                return len(tokens)
+            except Exception as e:
+                logger.debug(
+                    "tokenizer_failed_using_char_estimate",
+                    error=str(e),
+                )
+                return len(text) // 4
+        else:
+            return len(text) // 4
