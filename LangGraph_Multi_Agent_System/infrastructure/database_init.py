@@ -25,7 +25,7 @@ def initialize_mongodb_database_and_collections(mongodb_uri: str) -> bool:
     print(f"\n[SETUP] Initializing database: {MONGODB_DATABASE_NAME}")
 
     try:
-        from pymongo import MongoClient, ASCENDING
+        from pymongo import MongoClient, ASCENDING, DESCENDING
 
         client = MongoClient(mongodb_uri)
         database = client[MONGODB_DATABASE_NAME]
@@ -84,6 +84,24 @@ def initialize_mongodb_database_and_collections(mongodb_uri: str) -> bool:
         drugs_collection.create_index(
             [("drug_class", ASCENDING)],
             name="idx_drug_class",
+        )
+
+        # Indexes for the standardized drug ingestion pipeline attributes.
+        drugs_collection.create_index(
+            [("therapeutic_category", ASCENDING)],
+            name="idx_therapeutic_category",
+        )
+        drugs_collection.create_index(
+            [("pharmacological_class", ASCENDING)],
+            name="idx_pharmacological_class",
+        )
+        drugs_collection.create_index(
+            [("is_preferred_on_formulary", ASCENDING)],
+            name="idx_is_preferred_on_formulary",
+        )
+        drugs_collection.create_index(
+            [("data_quality_score", DESCENDING)],
+            name="idx_data_quality_score_desc",
         )
 
         print(f"[SETUP] Indexes created for: {drugs_collection_name}")
