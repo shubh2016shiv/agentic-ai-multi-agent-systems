@@ -81,7 +81,7 @@ HOW TO RUN
 # ── Standard library ────────────────────────────────────────────────────────
 import sys
 import json
-from typing import TypedDict, Annotated
+from typing import Literal, TypedDict, Annotated
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
