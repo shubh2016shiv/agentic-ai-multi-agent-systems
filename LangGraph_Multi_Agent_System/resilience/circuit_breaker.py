@@ -26,28 +26,36 @@ WHERE IT IS INVOKED — SOURCE ↔ DESTINATION MAPPING:
     Direct llm.invoke() calls BYPASS the circuit breaker. ***
 
     ┌─────────────────────────────────────────────────────────────────────────┐
-    │ Script                      │ Nodes (DESTINATION — trigger circuit breaker)│
-    ├─────────────────────────────┼─────────────────────────────────────────────┤
-    │ supervisor_orchestration     │ pulmonology_worker_node, cardiology_worker_  │
-    │                             │ node, nephrology_worker_node, report_        │
-    │                             │ synthesis_node                               │
-    ├─────────────────────────────┼─────────────────────────────────────────────┤
-    │ peer_to_peer_orchestration   │ pulmonology_peer_node, cardiology_peer_node, │
-    │                             │ nephrology_peer_node, synthesis_node        │
-    ├─────────────────────────────┼─────────────────────────────────────────────┤
-    │ dynamic_router_orchestration │ pulmonology_specialist_node, cardiology_     │
-    │                             │ specialist_node, nephrology_specialist_node,│
-    │                             │ router_report_node                            │
-    ├─────────────────────────────┼─────────────────────────────────────────────┤
-    │ hybrid_orchestration        │ cardiopulmonary_pulmonology_node,             │
-    │                             │ cardiopulmonary_cardiology_node,             │
-    │                             │ renal_specialist_node, hybrid_synthesis_node │
-    └─────────────────────────────┴─────────────────────────────────────────────┘
+    │ Script (STAGE)               │ Nodes (DESTINATION — trigger circuit breaker)│
+    ├──────────────────────────────┼────────────────────────────────────────────┤
+    │ supervisor_orchestration     │ pulmonology_worker_node, cardiology_worker_ │
+    │ (STAGE 1)                   │ node, nephrology_worker_node, report_       │
+    │                             │ synthesis_node                              │
+    ├──────────────────────────────┼────────────────────────────────────────────┤
+    │ peer_to_peer_orchestration   │ pulmonology_peer_node, cardiology_peer_node,│
+    │ (STAGE 2)                   │ nephrology_peer_node, synthesis_node        │
+    ├──────────────────────────────┼────────────────────────────────────────────┤
+    │ dynamic_router_orchestration │ pulmonology_specialist_node, cardiology_    │
+    │ (STAGE 3)                   │ specialist_node, nephrology_specialist_node,│
+    │                             │ router_report_node                          │
+    ├──────────────────────────────┼────────────────────────────────────────────┤
+    │ graph_of_subgraphs           │ ALL 10 nodes (9 subgraph + synthesis_node)  │
+    │ (STAGE 4)                   │ via _ORCHESTRATION_CALLER.call() directly   │
+    │                             │ (assessment/risk/recommendation ×3 + synth) │
+    ├──────────────────────────────┼────────────────────────────────────────────┤
+    │ hybrid_orchestration         │ cardiopulmonary_pulmonology_node,           │
+    │ (STAGE 5)                   │ cardiopulmonary_cardiology_node,            │
+    │                             │ renal_specialist_node, hybrid_synthesis_node│
+    └──────────────────────────────┴────────────────────────────────────────────┘
 
     NOT TRIGGERED (direct llm.invoke — no circuit breaker):
-        supervisor_decide_node, input_classifier_node, hybrid_supervisor_node;
-        graph_of_subgraphs_orchestration (all nodes); handoff/*; MAS_architectures/*;
-        guardrails/, HITL/, memory_management/, tools/, observability_and_traceability/
+        supervisor_decide_node, input_classifier_node, hybrid_supervisor_node
+        (routing/classification nodes use raw llm.invoke by design);
+        handoff/*; MAS_architectures/*; guardrails/, HITL/, memory_management/,
+        tools/, observability_and_traceability/
+
+    NOTE: graph_of_subgraphs_orchestration ALL nodes now trigger the breaker via
+        _ORCHESTRATION_CALLER.call(llm.invoke, ...) — this was fixed in STAGE 4.2.
 
     Call chain (SOURCE): orchestrator.invoke_specialist/invoke_synthesizer
         → ResilientCaller.call(llm.invoke, ...) → circuit_breaker.call(_timed_call)
@@ -302,6 +310,16 @@ class CircuitBreakerRegistry:
         - langgraph_integration_example.py: get_or_create("openai_api").
         - ResilientCaller: accepts circuit_breaker in constructor; used for
           every call unless skip_circuit_breaker=True.
+
+    CONNECTION (orchestration/orchestrator.py): The key "orchestration_llm_api"
+    is used by _ORCHESTRATION_LLM_BREAKER — the shared breaker instance that
+    ALL 5 orchestration patterns share. When the LLM API goes down, this single
+    breaker opens and stops ALL patterns from making further calls immediately.
+
+    CONNECTION (resilience/resilient_caller.py): _ORCHESTRATION_CALLER receives
+    this breaker in its constructor and uses it as layer [4] in the call stack.
+    When the breaker is OPEN, ResilientCaller.call() raises CircuitBreakerOpen
+    before even calling llm.invoke (fail-fast guarantee).
 
     PATTERN: Multiton (named singleton variant)
         - One instance per key (service name).

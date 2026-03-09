@@ -10,6 +10,89 @@ is the primary integration point; handoff/MAS_architectures may adopt
 the same pattern or a future shared helper.
 
 ════════════════════════════════════════
+  WHERE THIS FITS IN THE MAS ARCHITECTURE
+════════════════════════════════════════
+
+Resilience is NOT a standalone pattern or a separate layer in the graph.
+It is EMBEDDED INSIDE the orchestration component module.
+
+    ┌──────────────────────────────────────────────────────────────┐
+    │                    MAS Architecture                          │
+    │                                                              │
+    │  orchestration/orchestrator.py                              │
+    │  ├── _ORCHESTRATION_LLM_BREAKER  (shared circuit breaker)   │
+    │  └── _ORCHESTRATION_CALLER       (ResilientCaller façade)   │
+    │             │                                               │
+    │             │  BaseOrchestrator.invoke_specialist()         │
+    │             │  BaseOrchestrator.invoke_synthesizer()        │
+    │             ▼                                               │
+    │  ┌──────────────────────────────────────────────────────┐   │
+    │  │  resilience/ — 6-layer stack (outer → inner)        │   │
+    │  │  ┌────────────────────────────────────────────────┐  │   │
+    │  │  │  [1] Token Budget   (fail fast if over budget) │  │   │
+    │  │  │  [2] Bulkhead       (SKIPPED for linear flows) │  │   │
+    │  │  │  [3] Rate Limiter   (ENABLED, smooths bursts)  │  │   │
+    │  │  │  [4] Circuit Breaker (fail-fast, shared)       │  │   │
+    │  │  │  [5] Retry Handler  (transient errors only)    │  │   │
+    │  │  │  [6] Timeout Guard  (30s deadline, innermost)  │  │   │
+    │  │  └────────────────────────────────────────────────┘  │   │
+    │  └──────────────────────────────────────────────────────┘   │
+    │             │                                               │
+    │             ▼                                               │
+    │  llm.invoke(prompt)  ← the ACTUAL LLM API call             │
+    │                                                              │
+    │  Orchestration patterns that trigger this stack:            │
+    │  ┌────────────────────────────────────────────────────┐     │
+    │  │ STAGE 1: supervisor_orchestration/agents.py        │     │
+    │  │   pulmonology_worker_node, cardiology_worker_node, │     │
+    │  │   nephrology_worker_node, report_synthesis_node    │     │
+    │  │ STAGE 2: peer_to_peer_orchestration/agents.py      │     │
+    │  │   pulmonology_peer_node, cardiology_peer_node,     │     │
+    │  │   nephrology_peer_node, synthesis_node             │     │
+    │  │ STAGE 3: dynamic_router_orchestration/agents.py    │     │
+    │  │   pulmonology_specialist_node, cardiology_         │     │
+    │  │   specialist_node, nephrology_specialist_node,     │     │
+    │  │   router_report_node                               │     │
+    │  │ STAGE 4: graph_of_subgraphs_orchestration/         │     │
+    │  │   All 9 subgraph nodes + synthesis_node            │     │
+    │  │   (via _ORCHESTRATION_CALLER.call() directly)      │     │
+    │  │ STAGE 5: hybrid_orchestration/agents.py            │     │
+    │  │   cardiopulmonary_pulmonology_node,                │     │
+    │  │   cardiopulmonary_cardiology_node,                 │     │
+    │  │   renal_specialist_node, hybrid_synthesis_node     │     │
+    │  └────────────────────────────────────────────────────┘     │
+    │                                                              │
+    │  NOT protected (direct llm.invoke — no resilience):         │
+    │    supervisor_decide_node, input_classifier_node,            │
+    │    hybrid_supervisor_node (routing/classification nodes)     │
+    └──────────────────────────────────────────────────────────────┘
+
+CONNECTION: orchestration/orchestrator.py — the primary integration point.
+    BaseOrchestrator creates _ORCHESTRATION_LLM_BREAKER (CircuitBreakerRegistry)
+    and _ORCHESTRATION_CALLER (ResilientCaller) once, shared by all 5 patterns.
+
+CONNECTION: resilience/resilient_caller.py — the FAÇADE entry point.
+    _ORCHESTRATION_CALLER.call(llm.invoke, prompt) is how orchestration nodes
+    invoke the full resilience stack without knowing the internal composition.
+
+CONNECTION: resilience/circuit_breaker.py — the shared breaker instance.
+    "orchestration_llm_api" is the registry key. All 5 patterns share ONE
+    breaker so a failing LLM API stops ALL patterns immediately.
+
+════════════════════════════════════════
+  LEARNING SEQUENCE FOR RESILIENCE
+════════════════════════════════════════
+
+  Step 1: Read resilience/__init__.py (this file) — overview
+  Step 2: Read resilience/config.py — configuration parameters
+  Step 3: Read individual pattern files (circuit_breaker.py, retry_handler.py,
+          timeout_guard.py, rate_limiter.py, token_manager.py, bulkhead.py)
+  Step 4: Read resilience/resilient_caller.py — how they compose
+  Step 5: Read orchestration/orchestrator.py — how orchestration uses them
+  Step 6: Run scripts/orchestration/supervisor_orchestration/runner.py
+          and trace how invoke_specialist() flows through the stack
+
+════════════════════════════════════════
   QUICK START — TYPICAL USAGE
 ════════════════════════════════════════
 

@@ -188,6 +188,34 @@ class ResilientCaller:
         The patterns are applied in a fixed order (see module docstring).
         Each `skip_*` flag removes one layer for that specific call.
 
+        CONNECTION (orchestration/orchestrator.py): This method is called by
+        _ORCHESTRATION_CALLER.call(llm.invoke, prompt, ...) inside both
+        BaseOrchestrator.invoke_specialist() and invoke_synthesizer().
+        Every LLM call from any of the 5 orchestration patterns flows here.
+
+        CONNECTION (orchestration/orchestrator.py): The caller is
+        _ORCHESTRATION_CALLER — a ResilientCaller instance with a shared
+        circuit breaker (_ORCHESTRATION_LLM_BREAKER) shared across all patterns.
+
+        CONNECTION (scripts/orchestration/graph_of_subgraphs_orchestration/agents.py):
+        Subgraph nodes (assessment, risk, recommendation, synthesis) also call
+        _ORCHESTRATION_CALLER.call(llm.invoke, ...) directly — these are the only
+        orchestration nodes that bypass invoke_specialist() but still go through here.
+
+        ORCHESTRATION NODES THAT TRIGGER THIS METHOD:
+            STAGE 1 (supervisor): pulmonology_worker_node, cardiology_worker_node,
+                nephrology_worker_node, report_synthesis_node
+            STAGE 2 (peer-to-peer): pulmonology_peer_node, cardiology_peer_node,
+                nephrology_peer_node, synthesis_node
+            STAGE 3 (dynamic router): pulmonology_specialist_node, cardiology_
+                specialist_node, nephrology_specialist_node, router_report_node
+            STAGE 4 (subgraphs): 9 subgraph nodes + synthesis_node (directly)
+            STAGE 5 (hybrid): cardiopulmonary_pulmonology_node, cardiopulmonary_
+                cardiology_node, renal_specialist_node, hybrid_synthesis_node
+
+        NOT triggered (direct llm.invoke — no resilience):
+            supervisor_decide_node, input_classifier_node, hybrid_supervisor_node
+
         Args:
             func:                  The callable to execute (e.g., llm.invoke).
             *args:                 Positional args forwarded to `func`.
