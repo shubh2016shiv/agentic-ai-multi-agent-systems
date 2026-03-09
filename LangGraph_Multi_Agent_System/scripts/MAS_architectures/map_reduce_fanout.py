@@ -161,16 +161,20 @@ SUB_TASKS = {
 # STAGE 6.4 -- Node Definitions
 # ============================================================
 
-def mapper_node(state: MapReduceState) -> list[Send]:
+def mapper_node(state: MapReduceState) -> dict:
     """
-    MAP phase: split the patient case into independent sub-tasks
-    and fan out to parallel workers.
+    MAP phase: prepare for fan-out. The actual Send list is returned
+    by the conditional edge router so LangGraph treats it as routing.
+    """
+    print(f"    | [Mapper] MAP phase: {len(SUB_TASKS)} sub-tasks dispatched")
+    for worker_type, sub_task in SUB_TASKS.items():
+        print(f"    |   {worker_type}: {sub_task[:60]}...")
+    return {}
 
-    Each Send creates a parallel worker instance with its own
-    sub-task description. Workers run concurrently.
-    """
+
+def route_mapper(state: MapReduceState) -> list[Send]:
+    """Conditional edge router: return list of Send for parallel workers."""
     patient = state["patient_case"]
-
     sends = []
     for worker_type, sub_task_description in SUB_TASKS.items():
         sends.append(
@@ -183,11 +187,6 @@ def mapper_node(state: MapReduceState) -> list[Send]:
                 ),
             )
         )
-
-    print(f"    | [Mapper] MAP phase: {len(sends)} sub-tasks dispatched")
-    for worker_type, sub_task in SUB_TASKS.items():
-        print(f"    |   {worker_type}: {sub_task[:60]}...")
-
     return sends
 
 
@@ -303,7 +302,7 @@ def build_map_reduce_graph():
     workflow.add_node("producer", producer_node)
 
     workflow.add_edge(START, "mapper")
-    # mapper returns Send objects -> worker instances
+    workflow.add_conditional_edges("mapper", route_mapper, ["worker"])
     workflow.add_edge("worker", "reducer")
     workflow.add_edge("reducer", "producer")
     workflow.add_edge("producer", END)

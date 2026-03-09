@@ -139,16 +139,22 @@ AGENT_MAP = {
 # STAGE 3.3 -- Node Definitions
 # ============================================================
 
-def coordinator_node(state: VotingState) -> list[Send]:
+def coordinator_node(state: VotingState) -> dict:
     """
-    Fan out the patient case to all specialists in parallel.
+    Coordinator prepares for fan-out. The actual Send list is returned
+    by the conditional edge router (route_fanout) so LangGraph treats
+    it as routing, not state update.
+    """
+    print(f"    | [Coordinator] Fan-out: {len(AGENT_MAP)} specialists dispatched in parallel")
+    return {}
 
-    Returns a list of Send objects. Each Send creates a parallel
-    instance of the "specialist" node with its own input.
-    LangGraph runs all instances concurrently.
+
+def route_fanout(state: VotingState) -> list[Send]:
+    """
+    Conditional edge router that returns a list of Send objects.
+    Each Send creates a parallel instance of the "specialist" node.
     """
     patient = state["patient_case"]
-
     sends = []
     for specialist_type in AGENT_MAP.keys():
         sends.append(
@@ -160,8 +166,6 @@ def coordinator_node(state: VotingState) -> list[Send]:
                 ),
             )
         )
-
-    print(f"    | [Coordinator] Fan-out: {len(sends)} specialists dispatched in parallel")
     return sends
 
 
@@ -274,8 +278,8 @@ def build_voting_graph():
     workflow.add_node("aggregator", aggregator_node)
 
     workflow.add_edge(START, "coordinator")
-    # coordinator returns Send objects -> specialist instances
-    # specialist results auto-merge via operator.add reducer
+    # conditional edge returns list[Send] for parallel fan-out
+    workflow.add_conditional_edges("coordinator", route_fanout, ["specialist"])
     workflow.add_edge("specialist", "aggregator")
     workflow.add_edge("aggregator", END)
 
