@@ -185,26 +185,29 @@ def build_dynamic_pipeline():
             json.dumps(patient.get("lab_results", {})),
         ]).lower()
 
-        # Scan registry for matches
+        # Scan registry for matches (use tool names for set — StructuredTool is unhashable)
         matched_categories = []
-        selected_tools = set()
+        selected_tool_names: set[str] = set()
 
         for category, config in TOOL_REGISTRY.items():
             for keyword in config["keywords"]:
                 if keyword in search_text:
                     matched_categories.append(category)
                     for tool in config["tools"]:
-                        selected_tools.add(tool)
+                        selected_tool_names.add(tool.name)
                     print(f"    | Matched '{keyword}' -> category: {category}")
                     break
 
         # Always include baseline tools
         for tool in BASELINE_TOOLS:
-            selected_tools.add(tool)
+            selected_tool_names.add(tool.name)
 
-        # Deduplicate
-        tool_list = list(selected_tools)
-        tool_names = [t.name for t in tool_list]
+        # Resolve names back to tool list for logging
+        all_tools_by_name = {t.name: t for t in
+                             BASELINE_TOOLS + [check_drug_interactions, lookup_drug_info,
+                                               calculate_dosage_adjustment, lookup_clinical_guideline]}
+        tool_list = [all_tools_by_name[n] for n in selected_tool_names]
+        tool_names = list(selected_tool_names)
 
         print(f"\n    Matched categories : {matched_categories}")
         print(f"    Selected tools ({len(tool_list)}):")

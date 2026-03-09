@@ -64,11 +64,8 @@ if hasattr(sys.stdout, "reconfigure"):
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-# ── LangGraph ───────────────────────────────────────────────────────────────
-from langgraph.prebuilt import ToolNode
-
 # ── LangChain ───────────────────────────────────────────────────────────────
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import tool
 
 # ── Project imports ─────────────────────────────────────────────────────────
@@ -284,9 +281,20 @@ def run_pattern_2():
 
         if domain_calls:
             print(f"    | Domain tool calls: {[tc['name'] for tc in domain_calls]}")
-            tool_node = ToolNode(domain_tools)
-            tool_results = tool_node.invoke({"messages": [response]})
-            messages.extend([response] + tool_results["messages"])
+            tools_by_name = {t.name: t for t in domain_tools}
+            tool_messages = []
+            for tc in domain_calls:
+                name, args, tid = tc["name"], tc.get("args", {}), tc.get("id", "")
+                if name not in tools_by_name:
+                    tool_messages.append(ToolMessage(content=f"Unknown tool: {name}", tool_call_id=tid))
+                    continue
+                try:
+                    out = tools_by_name[name].invoke(args)
+                    content = out if isinstance(out, str) else json.dumps(out)
+                except Exception as e:
+                    content = f"Error: {e}"
+                tool_messages.append(ToolMessage(content=content, tool_call_id=tid))
+            messages.extend([response] + tool_messages)
             response = bound_llm.invoke(messages, config=config)
 
     print("    LLM did not call submit_triage_result.")
