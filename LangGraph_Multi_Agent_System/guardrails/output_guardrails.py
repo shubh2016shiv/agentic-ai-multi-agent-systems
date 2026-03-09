@@ -124,11 +124,14 @@ def validate_output(
         }
     """
     issues = []
+    if isinstance(output_text, list):
+        output_text = " ".join([b.get("text", "") if hasattr(b, "get") else str(b) for b in output_text])
+        
     needs_review = False
     modified_output = output_text
-
+    
     # 1. Empty/too-short response check
-    if not output_text or len(output_text.strip()) < 20:
+    if not output_text or len(str(output_text).strip()) < 20:
         issues.append({
             "type": "incomplete_response",
             "severity": "HIGH",
