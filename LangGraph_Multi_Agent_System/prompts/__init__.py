@@ -8,10 +8,15 @@ from prompts.base_prompts import ENTERPRISE_CONSTRAINTS_SUFFIX
 from prompts.triage_prompts import TRIAGE_SYSTEM_PROMPT
 from prompts.pharmacology_prompts import PHARMACOLOGY_SYSTEM_PROMPT
 from prompts.guidelines_prompts import GUIDELINES_SYSTEM_PROMPT
+from prompts.diagnostic_prompts import DIAGNOSTIC_SYSTEM_PROMPT
+from prompts.pharmacist_prompts import PHARMACIST_SYSTEM_PROMPT
 
 __all__ = [
     "ENTERPRISE_CONSTRAINTS_SUFFIX",
     "TRIAGE_SYSTEM_PROMPT",
     "PHARMACOLOGY_SYSTEM_PROMPT",
     "GUIDELINES_SYSTEM_PROMPT",
+    "DIAGNOSTIC_SYSTEM_PROMPT",
+    "PHARMACIST_SYSTEM_PROMPT",
 ]
+
