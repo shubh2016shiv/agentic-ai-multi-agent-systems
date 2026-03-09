@@ -110,7 +110,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 # -- Project imports ----------------------------------------------------------
 # CONNECTION: core/ root module — get_llm() centralises LLM config so all nodes
 # use the same provider/model without hardcoding credentials.
-from core.config import get_llm
+from core.config import get_llm, get_llm_model_name
 # CONNECTION: observability/ root module — build_callback_config() attaches
 # Langfuse tracing to every LLM call. MetricsCollector (observability/metrics.py)
 # is the component that tracks per-agent token usage, latency, and cost.
@@ -194,7 +194,7 @@ Labs: {json.dumps(patient.get('lab_results', {}))}""")
         agent_name="triage",
         tokens_in=prompt_token_estimate,
         tokens_out=completion_token_estimate,
-        model="gemini-2.5-flash-preview-05-20",
+        model=get_llm_model_name(),
         latency_ms=llm_latency_ms,
     )
     print(f"    | [Triage] LLM: {prompt_token_estimate}+{completion_token_estimate} tokens, {llm_latency_ms:.0f}ms")
@@ -228,7 +228,7 @@ Labs: {json.dumps(patient.get('lab_results', {}))}""")
             agent_name="triage",
             tokens_in=len(str(messages)) // 4,
             tokens_out=completion_token_estimate,
-            model="gemini-2.5-flash-preview-05-20",
+            model=get_llm_model_name(),
             latency_ms=llm_latency_ms,
         )
 
@@ -326,7 +326,7 @@ Labs: {json.dumps(patient.get('lab_results', {}))}""")
         agent_name="pharmacist",
         tokens_in=prompt_token_estimate,
         tokens_out=completion_token_estimate,
-        model="gemini-2.5-flash-preview-05-20",
+        model=get_llm_model_name(),
         latency_ms=llm_latency_ms,
     )
     print(f"    | [Pharmacist] LLM: {prompt_token_estimate}+{completion_token_estimate} tokens, {llm_latency_ms:.0f}ms")
@@ -371,7 +371,7 @@ Pharmacist Review: {state.get('pharmacist_result', '')}""")
         agent_name="report",
         tokens_in=prompt_token_estimate,
         tokens_out=completion_token_estimate,
-        model="gemini-2.5-flash-preview-05-20",
+        model=get_llm_model_name(),
         latency_ms=llm_latency_ms,
     )
     print(f"    | [Report] LLM: {prompt_token_estimate}+{completion_token_estimate} tokens, {llm_latency_ms:.0f}ms")

@@ -116,7 +116,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 # -- Project imports ----------------------------------------------------------
 # CONNECTION: core/ root module — get_llm() centralises LLM config.
-from core.config import get_llm
+from core.config import get_llm, get_llm_model_name
 # CONNECTION: observability/ root module — all four observability components used:
 #   build_callback_config()  — Langfuse trace/span/generation hierarchy (STAGE 1)
 #   get_langfuse_client()    — programmatic trace URL and score attachment (STAGE 3)
@@ -219,7 +219,7 @@ Labs: {json.dumps(patient.get('lab_results', {}))}""")
         agent_name="triage",
         tokens_in=prompt_tokens,
         tokens_out=completion_tokens,
-        model="gemini-2.5-flash-preview-05-20",
+        model=get_llm_model_name(),
         latency_ms=latency_ms,
     )
 
@@ -248,7 +248,7 @@ Labs: {json.dumps(patient.get('lab_results', {}))}""")
             agent_name="triage",
             tokens_in=len(str(messages)) // 4,
             tokens_out=len(response.content) // 4,
-            model="gemini-2.5-flash-preview-05-20",
+            model=get_llm_model_name(),
             latency_ms=latency_ms,
         )
 
@@ -297,7 +297,7 @@ Labs: {json.dumps(patient.get('lab_results', {}))}""")
         agent_name="pharmacist",
         tokens_in=prompt_tokens,
         tokens_out=completion_tokens,
-        model="gemini-2.5-flash-preview-05-20",
+        model=get_llm_model_name(),
         latency_ms=latency_ms,
     )
 
@@ -382,7 +382,7 @@ Score as JSON (1-5):""")
         agent_name="evaluator",
         tokens_in=len(str([judge_system, judge_prompt])) // 4,
         tokens_out=len(judge_response.content) // 4,
-        model="gemini-2.5-flash-preview-05-20",
+        model=get_llm_model_name(),
         latency_ms=latency_ms,
     )
 
@@ -458,7 +458,7 @@ Quality Scores: {state.get('evaluation_summary', '')}""")
         agent_name="report",
         tokens_in=prompt_tokens,
         tokens_out=completion_tokens,
-        model="gemini-2.5-flash-preview-05-20",
+        model=get_llm_model_name(),
         latency_ms=latency_ms,
     )
 

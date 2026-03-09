@@ -108,7 +108,7 @@ from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 
 # -- Project imports ----------------------------------------------------------
 # CONNECTION: core/ root module — get_llm() centralises LLM config.
-from core.config import get_llm
+from core.config import get_llm, get_llm_model_name
 # CONNECTION: observability/ root module — build_callback_config() accepts
 # session_id and user_id parameters that Langfuse uses to group related
 # traces into a single session. MetricsCollector aggregates usage across
@@ -182,7 +182,7 @@ def clinical_agent_node(state: SessionState) -> dict:
         agent_name=f"clinical_agent_turn_{current_turn}",
         tokens_in=prompt_token_estimate,
         tokens_out=completion_token_estimate,
-        model="gemini-2.5-flash-preview-05-20",
+        model=get_llm_model_name(),
         latency_ms=latency_ms,
     )
 
