@@ -62,13 +62,13 @@ class Settings(BaseSettings):
 
     # --- LLM Provider ---
     llm_provider: Literal["openai", "gemini", "lmstudio"] = Field(
-        default="lmstudio",
+        default="openai",
         description="Which LLM provider to use. Determines which API key and model are active.",
     )
 
     # --- OpenAI ---
     openai_api_key: str = Field(default="", description="OpenAI API key")
-    openai_model_name: str = Field(default="gpt-4o", description="OpenAI chat model name")
+    openai_model_name: str = Field(default="gpt-4o-mini", description="OpenAI chat model name")
     openai_embedding_model: str = Field(
         default="text-embedding-3-small",
         description="OpenAI embedding model (text-embedding-3-small or text-embedding-3-large)",
@@ -221,6 +221,16 @@ def get_llm(
         max_tokens=effective_max_tokens,
         **kwargs,
     )
+
+
+def get_llm_model_name(provider: str | None = None) -> str:
+    """Return the configured model name for the given provider (for metrics/tracing)."""
+    active = provider or settings.llm_provider
+    if active == "openai":
+        return settings.openai_model_name
+    if active == "gemini":
+        return settings.gemini_model_name
+    return settings.lmstudio_model_name
 
 
 def get_embeddings(provider: str | None = None, **kwargs):

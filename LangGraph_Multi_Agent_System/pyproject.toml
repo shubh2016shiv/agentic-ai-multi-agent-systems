@@ -38,6 +38,8 @@ dependencies = [
   # Environment Management
   "python-dotenv>=1.0.0",
   "langchain>=1.2.10",
+  # Structured Logging
+  "structlog>=24.0.0",
 ]
 
 [project.optional-dependencies]
@@ -52,8 +54,25 @@ dev = [
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools]
-packages = []
+[tool.setuptools.packages.find]
+# Auto-discover root-level packages so that `pip install -e .`
+# makes agents, core, tools, etc. importable without sys.path hacks.
+# scripts/ is deliberately excluded — pattern demo scripts are run as
+# `python -m scripts.MAS_architectures.sequential_pipeline`, not imported.
+include = [
+    "agents*",
+    "core*",
+    "tools*",
+    "prompts*",
+    "guardrails*",
+    "memory*",
+    "observability*",
+    "resilience*",
+    "orchestration*",
+    "document_processing*",
+    "data_ingestion*",
+    "scripts*",
+]
 
 [tool.ruff]
 line-length = 100
